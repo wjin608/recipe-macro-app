@@ -295,7 +295,7 @@ async function callProxy(body){
 
 async function calculateMacros(name,servings,ingLines){
   return callProxy({
-    model:'claude-sonnet-4-20250514',max_tokens:1200,
+    model:'claude-sonnet-4-5',max_tokens:1200,
     system:`You are a nutrition expert. Calculate macros PER SERVING. Return ONLY a valid JSON object (no markdown, no backticks):\n{"cal":450,"protein":32,"carbs":40,"fat":14,"ingredients":[{"item":"mascarpone","cal":400,"protein":6,"carbs":3,"fat":40}]}\nTop-level values are PER SERVING. ingredients array shows per-ingredient macros for the TOTAL recipe.`,
     messages:[{role:'user',content:`Recipe: ${name}\nServings: ${servings}\n\nIngredients:\n${ingLines}`}]
   });
@@ -315,7 +315,7 @@ async function importFromUrl(){
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',max_tokens:1500,
+        model:'claude-sonnet-4-5',max_tokens:1500,
         tools:[{type:'web_search_20250305',name:'web_search'}],
         system:`Extract the complete recipe from the given URL using web_search. Return ONLY a valid JSON object (no markdown, no backticks):\n{"name":"string","servings":4,"time":"string","ingredients":[{"item":"string","amount":"200g","rawAmount":"200g"}],"steps":["Step one"]}`,
         messages:[{role:'user',content:`Extract the recipe from: ${url}`}]
@@ -347,7 +347,7 @@ async function handleUpload(evt){
     if(file.type==='text/plain'){
       const text=await file.text();
       setStatus(statusEl,'loading','Extracting recipe...');
-      r=await callProxy({model:'claude-sonnet-4-20250514',max_tokens:1200,
+      r=await callProxy({model:'claude-sonnet-4-5',max_tokens:1200,
         system:`Extract the recipe and return ONLY a valid JSON object (no markdown, no backticks):\n{"name":"string","servings":4,"time":"string","ingredients":[{"item":"string","amount":"200g","rawAmount":"200g"}],"steps":["Step one"]}\nInclude rawAmount exactly as written.`,
         messages:[{role:'user',content:text}]});
     }else{
@@ -357,7 +357,7 @@ async function handleUpload(evt){
         ?[{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}},{type:'text',text:'Extract the recipe. Return ONLY JSON (no backticks).'}]
         :[{type:'image',source:{type:'base64',media_type:file.type,data:b64}},{type:'text',text:'Extract the recipe. Return ONLY JSON (no backticks).'}];
       const resp=await fetch('/api/proxy',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1200,
+        body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:1200,
           system:`Extract recipe. Return ONLY JSON (no markdown, no backticks): {"name":"string","servings":4,"time":"string","ingredients":[{"item":"string","amount":"200g","rawAmount":"200g"}],"steps":["Step one"]}`,
           messages:[{role:'user',content:msgContent}]})});
       const data=await resp.json();
