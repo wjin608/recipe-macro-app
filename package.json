@@ -1,0 +1,10 @@
+{
+  "name": "recipe-macro-app",
+  "version": "1.0.0",
+  "description": "Recipe and macro tracking app",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "license": "MIT"
+}
