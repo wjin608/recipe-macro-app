@@ -157,6 +157,20 @@ h1,h2,h3{font-family:'Lora',serif;}
 .upload-drop{border:1.5px dashed var(--border2);border-radius:var(--radius);padding:26px;text-align:center;cursor:pointer;color:var(--text2);font-size:14px;}
 .upload-drop:hover{background:var(--surface2);}
 .upload-drop svg{display:block;margin:0 auto 10px;color:var(--text3);}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.38);z-index:300;display:flex;align-items:center;justify-content:center;}
+.modal{background:var(--surface);border-radius:var(--radius-lg);padding:22px;width:440px;max-width:95vw;max-height:88vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.18);}
+.modal-title{font-family:'Lora',serif;font-size:17px;margin-bottom:12px;}
+.pick-list{display:flex;flex-direction:column;gap:5px;max-height:200px;overflow-y:auto;margin-bottom:12px;}
+.modal-field{margin-bottom:10px;}
+.modal-field label{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text2);margin-bottom:4px;}
+.modal-field input,.modal-field select{width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--radius);font-size:14px;font-family:'DM Sans',sans-serif;}
+.modal-field input:focus,.modal-field select:focus{outline:none;border-color:var(--accent3);}
+.week-nav{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
+.week-nav-btn{padding:5px 12px;border:1px solid var(--border2);border-radius:var(--radius);background:#fff;cursor:pointer;font-size:13px;font-family:'DM Sans',sans-serif;}
+.week-nav-btn:hover{background:var(--bg);}
+.week-label{font-size:13px;font-weight:600;flex:1;text-align:center;color:var(--text2);}
+.week-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:18px;}
+.detail-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;}
 .source-tag{display:inline-block;font-size:11px;padding:2px 7px;border-radius:99px;background:#e8f0fb;color:#1a4a8a;margin-left:5px;vertical-align:middle;}
 
 .photo-upload-area{border:1.5px dashed var(--border2);border-radius:var(--radius);padding:20px;text-align:center;cursor:pointer;color:var(--text2);font-size:13px;background:#fff;transition:background 0.15s;}
@@ -195,16 +209,42 @@ h1,h2,h3{font-family:'Lora',serif;}
 <div id="topbar">
   <div class="app-logo">Recipe <span>Macro</span></div>
   <div class="topbar-right">Your personal recipe & macro tracker</div>
+  <button onclick="openSettings()" style="position:absolute;top:13px;right:18px;background:none;border:none;font-size:18px;cursor:pointer;color:#9b9590;padding:4px;line-height:1;" title="Settings">⚙</button>
 </div>
 
 <div id="layout">
-  <nav id="sidebar">
-    <div style="padding:16px 18px 12px;">
-      <div class="filter-label">Categories</div>
-      <div id="sidebar-filters"></div>
+  <nav id="sidebar" style="overflow-y:auto;">
+    <div style="border-bottom:1px solid var(--border);">
+      <div onclick="toggleSb('lib')" style="display:flex;justify-content:space-between;align-items:center;padding:11px 16px;cursor:pointer;user-select:none;">
+        <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text2);">📚 Recipe Library</span>
+        <span id="sb-arr-lib" style="font-size:10px;color:var(--text3);transition:transform 0.2s;display:inline-block;transform:rotate(90deg);">▶</span>
+      </div>
+      <div id="sb-lib">
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);padding:0 16px;margin-bottom:6px;">Categories</div>
+        <div id="sidebar-filters"></div>
+        <button class="add-recipe-btn" onclick="showPage('add')" style="margin:8px 14px 10px;width:calc(100% - 28px);">+ Add Recipe</button>
+      </div>
     </div>
-    <hr class="sidebar-divider"/>
-    <button class="add-recipe-btn" onclick="showPage('add')">+ Add Recipe</button>
+    <div style="border-bottom:1px solid var(--border);">
+      <div onclick="toggleSb('mp')" style="display:flex;justify-content:space-between;align-items:center;padding:11px 16px;cursor:pointer;user-select:none;">
+        <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text2);">🗓 Meal Planning</span>
+        <span id="sb-arr-mp" style="font-size:10px;color:var(--text3);transition:transform 0.2s;display:inline-block;">▶</span>
+      </div>
+      <div id="sb-mp" style="display:none;padding:4px 16px 10px;">
+        <p style="font-size:12px;color:var(--text2);margin-bottom:8px;">Plan meals for each day of the week.</p>
+        <button class="add-recipe-btn" onclick="showPage('mealplan')" style="width:100%;">Open Meal Plan</button>
+      </div>
+    </div>
+    <div style="border-bottom:1px solid var(--border);">
+      <div onclick="toggleSb('tr')" style="display:flex;justify-content:space-between;align-items:center;padding:11px 16px;cursor:pointer;user-select:none;">
+        <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text2);">📊 Macro Tracking</span>
+        <span id="sb-arr-tr" style="font-size:10px;color:var(--text3);transition:transform 0.2s;display:inline-block;">▶</span>
+      </div>
+      <div id="sb-tr" style="display:none;padding:4px 16px 10px;">
+        <p style="font-size:12px;color:var(--text2);margin-bottom:8px;">Log what you ate and track vs your goals.</p>
+        <button class="add-recipe-btn" onclick="showPage('tracking')" style="width:100%;">Open Tracking</button>
+      </div>
+    </div>
   </nav>
 
   <main id="main">
@@ -223,6 +263,41 @@ h1,h2,h3{font-family:'Lora',serif;}
     <div class="page" id="page-detail">
       <button class="back-link" onclick="showPage('library')">← Back to recipes</button>
       <div id="detail-content"></div>
+    </div>
+
+    <!-- MEAL PLAN PAGE -->
+    <div class="page" id="page-mealplan">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Meal Plan</h1>
+          <div class="page-subtitle" id="mp-subtitle"></div>
+        </div>
+      </div>
+      <div id="mp-who-row" style="margin-bottom:14px;"></div>
+      <div class="week-nav">
+        <button class="week-nav-btn" onclick="mpNavWeek(-1)">◀ Prev</button>
+        <div class="week-label" id="mp-week-label"></div>
+        <button class="week-nav-btn" onclick="mpNavWeek(1)">Next ▶</button>
+      </div>
+      <div class="week-grid" id="mp-week-grid"></div>
+      <div id="mp-day-panel"></div>
+    </div>
+
+    <!-- TRACKING PAGE -->
+    <div class="page" id="page-tracking">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">Macro Tracking</h1>
+          <div class="page-subtitle" id="tr-subtitle"></div>
+        </div>
+      </div>
+      <div class="week-nav">
+        <button class="week-nav-btn" onclick="trNavWeek(-1)">◀ Prev</button>
+        <div class="week-label" id="tr-week-label"></div>
+        <button class="week-nav-btn" onclick="trNavWeek(1)">Next ▶</button>
+      </div>
+      <div class="week-grid" id="tr-week-grid"></div>
+      <div id="tr-day-panel"></div>
     </div>
 
     <!-- ADD / EDIT -->
@@ -649,8 +724,8 @@ function catColor(cat){
 function showPage(page){
   currentPage=page;
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.getElementById(`page-${page}`).classList.add('active');
-  // Always refresh sidebar so category filters work from any page
+  const el=document.getElementById('page-'+page);
+  if(el) el.classList.add('active');
   renderSidebarFilters();
   if(page==='library'){editingIdx=null;renderLibrary();}
   if(page==='detail')renderDetail(detailIdx);
@@ -1078,6 +1153,648 @@ function selectSrvFn(prefix,type,el){
   el.classList.add('selected');srvType[prefix]=type;
   ['person','gram','custom'].forEach(t=>{const w=document.getElementById(`${prefix}-srv-${t}-wrap`);if(w)w.style.display=((t==='person'&&type==='person')||(t==='gram'&&type==='100g')||(t==='custom'&&type==='custom'))?'block':'none';});
 }
+
+// ══════════════════════════════════════════════════════════════════════════
+// SIDEBAR COLLAPSIBLE
+// ══════════════════════════════════════════════════════════════════════════
+function toggleSb(id) {
+  const body = document.getElementById('sb-' + id);
+  const arr = document.getElementById('sb-arr-' + id);
+  if (!body || !arr) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  arr.style.transform = open ? '' : 'rotate(90deg)';
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// PROFILES
+// ══════════════════════════════════════════════════════════════════════════
+const PROF_KEY = 'rma_profiles_v1';
+const PROF_COLORS = ['#c85a2a','#1d6b4a','#2c5f8a','#7c3aed','#be185d','#0f766e','#b45309','#374151'];
+
+let profiles = JSON.parse(localStorage.getItem(PROF_KEY) || 'null') || [
+  { id: 1, name: 'Me', color: '#2c5f8a', goals: { cal: 2000, protein: 150, carbs: 200, fat: 65 } }
+];
+function persistProfiles() { localStorage.setItem(PROF_KEY, JSON.stringify(profiles)); }
+function getProfile(id) { return profiles.find(p => p.id === id); }
+
+function openSettings() {
+  const profilesHtml = profiles.map(p => `
+    <div class="profile-card" id="pc-${p.id}">
+      <div style="width:32px;height:32px;border-radius:50%;background:${p.color};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0;">${p.name[0].toUpperCase()}</div>
+      <div style="flex:1;">
+        <div style="font-size:14px;font-weight:600;">${p.name}</div>
+        <div style="font-size:11px;color:var(--text2);">Goal: ${p.goals.cal} kcal · P${p.goals.protein}g · C${p.goals.carbs}g · F${p.goals.fat}g</div>
+      </div>
+      <div style="display:flex;gap:5px;">
+        <button class="btn-sm" onclick="editProfile(${p.id})">Edit</button>
+        ${profiles.length > 1 ? `<button class="btn-sm danger" onclick="deleteProfile(${p.id})">✕</button>` : ''}
+      </div>
+    </div>`).join('');
+
+  showModal('settings-modal', `
+    <div class="modal-title">⚙ Settings & Profiles</div>
+    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);margin-bottom:8px;">User Profiles</div>
+    <div id="profiles-list">${profilesHtml}</div>
+    <button class="btn btn-secondary" style="width:100%;margin-top:6px;" onclick="editProfile(null)">+ Add Profile</button>
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn btn-secondary" onclick="closeModal('settings-modal')">Close</button>
+    </div>`);
+}
+
+function editProfile(id) {
+  const p = id ? getProfile(id) : { id: null, name: '', color: PROF_COLORS[profiles.length % PROF_COLORS.length], goals: { cal: 2000, protein: 150, carbs: 200, fat: 65 } };
+  const colorSwatches = PROF_COLORS.map(c =>
+    `<div onclick="selectProfileColor('${c}',this)" style="width:22px;height:22px;border-radius:50%;background:${c};cursor:pointer;border:2px solid ${c===p.color?'#1a1714':'transparent'};display:inline-block;margin-right:4px;" data-color="${c}"></div>`
+  ).join('');
+
+  showModal('edit-profile-modal', `
+    <div class="modal-title">${id ? 'Edit Profile' : 'New Profile'}</div>
+    <div class="modal-field"><label>Name</label><input id="pf-name" value="${p.name}" placeholder="e.g. Alex"/></div>
+    <div class="modal-field"><label>Color</label><div id="pf-colors" style="margin-top:4px;">${colorSwatches}</div></div>
+    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);margin:10px 0 6px;">Daily Macro Goals</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <div class="modal-field"><label>Calories</label><input type="number" id="pf-cal" value="${p.goals.cal}"/></div>
+      <div class="modal-field"><label>Protein (g)</label><input type="number" id="pf-pro" value="${p.goals.protein}"/></div>
+      <div class="modal-field"><label>Carbs (g)</label><input type="number" id="pf-carb" value="${p.goals.carbs}"/></div>
+      <div class="modal-field"><label>Fat (g)</label><input type="number" id="pf-fat" value="${p.goals.fat}"/></div>
+    </div>
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn btn-primary" onclick="saveProfile(${id||'null'})">Save</button>
+      <button class="btn btn-secondary" onclick="closeModal('edit-profile-modal');openSettings()">Cancel</button>
+    </div>`);
+  window._editProfileColor = p.color;
+}
+
+function selectProfileColor(color, el) {
+  window._editProfileColor = color;
+  document.querySelectorAll('#pf-colors div').forEach(d => d.style.borderColor = d.dataset.color === color ? '#1a1714' : 'transparent');
+}
+
+function saveProfile(id) {
+  const name = document.getElementById('pf-name').value.trim();
+  if (!name) { alert('Please enter a name.'); return; }
+  const goals = {
+    cal: parseInt(document.getElementById('pf-cal').value) || 2000,
+    protein: parseInt(document.getElementById('pf-pro').value) || 150,
+    carbs: parseInt(document.getElementById('pf-carb').value) || 200,
+    fat: parseInt(document.getElementById('pf-fat').value) || 65,
+  };
+  if (id) {
+    const p = getProfile(id); p.name = name; p.color = window._editProfileColor; p.goals = goals;
+  } else {
+    profiles.push({ id: Date.now(), name, color: window._editProfileColor, goals });
+  }
+  persistProfiles();
+  closeModal('edit-profile-modal');
+  openSettings();
+}
+
+function deleteProfile(id) {
+  if (!confirm('Delete this profile? Their tracking data will be removed.')) return;
+  profiles = profiles.filter(p => p.id !== id);
+  persistProfiles();
+  openSettings();
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// MEAL PLAN STATE
+// ══════════════════════════════════════════════════════════════════════════
+const MP_KEY = 'rma_mealplan_v1';
+const MEAL_SLOTS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
+// mealPlan[weekKey][dateKey][slot] = [{recipeId, servings, eatingProfiles:[id,...]}]
+let mealPlan = JSON.parse(localStorage.getItem(MP_KEY) || '{}');
+function persistMP() { localStorage.setItem(MP_KEY, JSON.stringify(mealPlan)); }
+
+let mpWeekOffset = 0;   // 0 = current week, -1 = last week, etc.
+let mpActiveDay = null;
+let mpWeekProfiles = []; // profile ids eating this week
+
+function getWeekDates(offset) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const dow = today.getDay(); const diff = dow === 0 ? -6 : 1 - dow;
+  const mon = new Date(today); mon.setDate(today.getDate() + diff + offset * 7);
+  return Array.from({length:7}, (_, i) => { const d = new Date(mon); d.setDate(mon.getDate()+i); return d; });
+}
+function dKey(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function isToday(d) { const t=new Date();t.setHours(0,0,0,0);return d.getTime()===t.getTime(); }
+function weekKey(offset) { const days=getWeekDates(offset); return dKey(days[0]); }
+function ensureWeek(wk) { if(!mealPlan[wk]) mealPlan[wk]={_profiles:[]}; if(!mealPlan[wk]._profiles) mealPlan[wk]._profiles=[]; }
+
+function getMPWeekProfiles() {
+  const wk = weekKey(mpWeekOffset);
+  ensureWeek(wk);
+  const stored = mealPlan[wk]._profiles;
+  return stored.length ? stored : profiles.map(p=>p.id);
+}
+
+// Compute macros for a day from mealplan entries
+function dayMPMacros(wk, dk) {
+  let cal=0,pro=0,carb=0,fat=0;
+  MEAL_SLOTS.forEach(slot => {
+    ((mealPlan[wk]||{})[dk]||{})[slot]?.forEach(entry => {
+      const r = recipes.find(r=>r.id===entry.recipeId); if(!r||!hasMacros(r)) return;
+      const factor = entry.servings / r.servings;
+      cal += (r._overrides?.cal??r.cal)*factor;
+      pro += (r._overrides?.protein??r.protein)*factor;
+      carb += (r._overrides?.carbs??r.carbs)*factor;
+      fat += (r._overrides?.fat??r.fat)*factor;
+    });
+  });
+  return {cal:Math.round(cal),protein:parseFloat(pro.toFixed(1)),carbs:parseFloat(carb.toFixed(1)),fat:parseFloat(fat.toFixed(1))};
+}
+
+// ── Render Meal Plan ───────────────────────────────────────────────────────
+function renderMealPlan() {
+  const days = getWeekDates(mpWeekOffset);
+  const wk = weekKey(mpWeekOffset);
+  ensureWeek(wk);
+
+  const fmt = d => d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  document.getElementById('mp-week-label').textContent = fmt(days[0]) + ' – ' + fmt(days[6]) + ', ' + days[0].getFullYear();
+
+  // Who's eating this week
+  const wkProfiles = getMPWeekProfiles();
+  document.getElementById('mp-who-row').innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <span style="font-size:12px;color:var(--text2);font-weight:600;">Who's eating this week:</span>
+      ${profiles.map(p=>`<span onclick="toggleMPProfile(${p.id})" style="padding:4px 11px;border-radius:99px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid ${wkProfiles.includes(p.id)?p.color:' var(--border2)'};background:${wkProfiles.includes(p.id)?p.color:'#fff'};color:${wkProfiles.includes(p.id)?'#fff':'var(--text2)'};">${p.name}</span>`).join('')}
+    </div>`;
+
+  if (!mpActiveDay || !days.find(d=>dKey(d)===mpActiveDay)) {
+    const tod = days.find(d=>isToday(d));
+    mpActiveDay = tod ? dKey(tod) : dKey(days[0]);
+  }
+  renderMPWeekGrid(days, wk);
+  renderMPDayPanel(mpActiveDay, wk);
+}
+
+function toggleMPProfile(pid) {
+  const wk = weekKey(mpWeekOffset); ensureWeek(wk);
+  let wkp = getMPWeekProfiles();
+  wkp.includes(pid) ? (wkp = wkp.filter(id=>id!==pid)) : wkp.push(pid);
+  if (!wkp.length) return; // must have at least one
+  mealPlan[wk]._profiles = wkp;
+  persistMP(); renderMealPlan();
+}
+
+function mpNavWeek(dir) { mpWeekOffset += dir; mpActiveDay = null; renderMealPlan(); }
+
+function renderMPWeekGrid(days, wk) {
+  const DNAMES = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  document.getElementById('mp-week-grid').innerHTML = days.map((d,i)=>{
+    const dk = dKey(d); const m = dayMPMacros(wk,dk);
+    const slots = ((mealPlan[wk]||{})[dk])||{};
+    const ct = MEAL_SLOTS.reduce((n,s)=>n+(slots[s]?.length||0),0);
+    const isAct = dk===mpActiveDay; const isTod = isToday(d);
+    return `<div onclick="mpSelectDay('${dk}')" style="background:var(--surface);border:1.5px solid ${isAct?'var(--text)':isTod?'var(--accent3)':'var(--border)'};border-radius:var(--radius-lg);padding:9px 7px;cursor:pointer;min-height:95px;">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);">${DNAMES[i]}</div>
+      <div style="font-size:17px;font-weight:700;font-family:'Lora',serif;line-height:1.1;margin:1px 0 4px;">${d.getDate()}</div>
+      ${isTod?'<div style="font-size:9px;background:var(--accent3);color:#fff;border-radius:99px;padding:1px 5px;display:inline-block;margin-bottom:3px;">Today</div>':''}
+      ${m.cal>0?`<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><span style="font-weight:600;color:var(--text);">${m.cal}</span> kcal</div>
+      <div style="font-size:10px;color:var(--text2);">P<span style="font-weight:600;">${m.protein}</span> C<span style="font-weight:600;">${m.carbs}</span></div>`
+      :'<div style="font-size:10px;color:var(--text3);">No meals</div>'}
+      ${ct>0?`<div style="font-size:10px;color:var(--text3);margin-top:3px;">${ct} item${ct!==1?'s':''}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function mpSelectDay(dk) { mpActiveDay=dk; renderMPWeekGrid(getWeekDates(mpWeekOffset),weekKey(mpWeekOffset)); renderMPDayPanel(dk,weekKey(mpWeekOffset)); }
+
+function renderMPDayPanel(dk, wk) {
+  const d = new Date(dk+'T00:00:00');
+  const title = d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  const m = dayMPMacros(wk,dk);
+  const daySlots = ((mealPlan[wk]||{})[dk])||{};
+  const wkProfiles = getMPWeekProfiles();
+
+  const slotsHtml = MEAL_SLOTS.map(slot=>{
+    const items = daySlots[slot]||[];
+    // slot macros
+    let sc=0,sp=0,sca=0,sf=0;
+    items.forEach(e=>{const r=recipes.find(r=>r.id===e.recipeId);if(!r||!hasMacros(r))return;const f=e.servings/r.servings;sc+=(r._overrides?.cal??r.cal)*f;sp+=(r._overrides?.protein??r.protein)*f;sca+=(r._overrides?.carbs??r.carbs)*f;sf+=(r._overrides?.fat??r.fat)*f;});
+    const slotMacStr = sc>0?`${Math.round(sc)} kcal · P${parseFloat(sp.toFixed(1))}g · C${parseFloat(sca.toFixed(1))}g · F${parseFloat(sf.toFixed(1))}g`:'';
+
+    const itemsHtml = items.map((e,idx)=>{
+      const r=recipes.find(r=>r.id===e.recipeId); if(!r) return '';
+      const eaters = (e.eatingProfiles||wkProfiles).map(pid=>{const p=getProfile(pid);return p?`<span style="font-size:10px;padding:1px 5px;border-radius:99px;background:${p.color};color:#fff;">${p.name}</span>`:''}).join('');
+      const calPer = hasMacros(r)?Math.round((r._overrides?.cal??r.cal)*e.servings/r.servings)+' kcal':'';
+      return `<div style="display:flex;align-items:center;gap:7px;padding:7px 9px;background:var(--bg);border-radius:var(--radius);margin-bottom:4px;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.name}</div>
+          <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:2px;">${eaters}<span style="font-size:11px;color:var(--text3);">${e.servings} srv</span></div>
+        </div>
+        <div style="font-size:11px;color:var(--text2);white-space:nowrap;">${calPer}</div>
+        <div style="display:flex;gap:3px;">
+          <button class="btn-sm" onclick="mpEditEntry('${wk}','${dk}','${slot}',${idx})">✏</button>
+          <button class="btn-sm" onclick="mpCopyEntry('${wk}','${dk}','${slot}',${idx})" title="Copy to another day">⎘</button>
+          <button class="btn-sm danger" onclick="mpRemoveEntry('${wk}','${dk}','${slot}',${idx})">×</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    return `<div style="margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+        <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text2);">${slot}</span>
+        <span style="font-size:11px;color:var(--text3);">${slotMacStr}</span>
+      </div>
+      ${itemsHtml}
+      <button style="width:100%;padding:6px;border:1.5px dashed var(--border2);border-radius:var(--radius);background:none;font-size:12px;color:var(--text3);cursor:pointer;font-family:'DM Sans',sans-serif;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'" onclick="mpOpenAddModal('${wk}','${dk}','${slot}',null)">+ Add recipe</button>
+    </div>`;
+  }).join('');
+
+  document.getElementById('mp-day-panel').innerHTML = `<div class="detail-panel">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px;">
+      <div style="font-family:'Lora',serif;font-size:19px;letter-spacing:-0.01em;">${title}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px;">
+      <div style="background:var(--bg);border-radius:var(--radius);padding:9px;text-align:center;"><span style="font-size:16px;font-weight:700;display:block;color:var(--accent);">${m.cal}</span><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-top:3px;">Calories</div></div>
+      <div style="background:var(--bg);border-radius:var(--radius);padding:9px;text-align:center;"><span style="font-size:16px;font-weight:700;display:block;color:var(--accent2);">${m.protein}g</span><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-top:3px;">Protein</div></div>
+      <div style="background:var(--bg);border-radius:var(--radius);padding:9px;text-align:center;"><span style="font-size:16px;font-weight:700;display:block;">${m.carbs}g</span><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-top:3px;">Carbs</div></div>
+      <div style="background:var(--bg);border-radius:var(--radius);padding:9px;text-align:center;"><span style="font-size:16px;font-weight:700;display:block;">${m.fat}g</span><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-top:3px;">Fat</div></div>
+    </div>
+    ${slotsHtml}
+  </div>`;
+}
+
+// ── Meal Plan Modal ────────────────────────────────────────────────────────
+function mpOpenAddModal(wk, dk, slot, editIdx) {
+  const existingEntry = editIdx!=null ? ((mealPlan[wk]?.[dk]?.[slot])||[])[editIdx] : null;
+  const wkProfiles = getMPWeekProfiles();
+  let selId = existingEntry?.recipeId || null;
+  let selServings = existingEntry?.servings || 1;
+  let selEaters = existingEntry?.eatingProfiles || [...wkProfiles];
+
+  const recipeList = recipes.length===0
+    ? '<p style="font-size:13px;color:var(--text3);">No recipes yet.</p>'
+    : recipes.map(r=>`<div onclick="mpPickRecipe(${r.id},this)" style="padding:8px 10px;border:1px solid ${selId===r.id?'var(--text)':'var(--border)'};border-radius:var(--radius);cursor:pointer;background:${selId===r.id?'var(--surface2)':'#fff'};font-size:13px;" data-id="${r.id}">
+        <div style="font-weight:500;">${r.name}</div>
+        <div style="font-size:11px;color:var(--text3);">${r.servingLabel||r.servings+' servings'} ${hasMacros(r)?'· '+(r._overrides?.cal??r.cal)+' kcal/srv':''}</div>
+      </div>`).join('');
+
+  const whoHtml = wkProfiles.map(pid=>{const p=getProfile(pid);if(!p)return'';const on=selEaters.includes(pid);
+    return `<span onclick="mpToggleEater(${pid},this)" data-pid="${pid}" style="padding:4px 10px;border-radius:99px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid ${on?p.color:'var(--border2)'};background:${on?p.color:'#fff'};color:${on?'#fff':'var(--text2)'};">${p.name}</span>`;}).join('');
+
+  const d = new Date(dk+'T00:00:00');
+  const dateStr = d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+
+  window._mpModal = {wk,dk,slot,editIdx,selId,selServings,selEaters:[...selEaters]};
+
+  showModal('mp-add-modal',`
+    <div class="modal-title">${editIdx!=null?'Edit':'Add to'} ${slot} · ${dateStr}</div>
+    <div class="pick-list" id="mp-recipe-list">${recipeList}</div>
+    <div class="modal-field"><label>Servings</label><input type="number" id="mp-servings" min="0.5" step="0.5" value="${selServings}"/></div>
+    ${wkProfiles.length>1?`<div class="modal-field"><label>Who's eating</label><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px;" id="mp-eaters">${whoHtml}</div></div>`:''}
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn btn-primary" onclick="mpConfirmEntry()">Save</button>
+      <button class="btn btn-secondary" onclick="closeModal('mp-add-modal')">Cancel</button>
+    </div>`);
+}
+
+function mpPickRecipe(id, el) {
+  window._mpModal.selId = id;
+  document.querySelectorAll('#mp-recipe-list > div').forEach(e=>{ e.style.borderColor='var(--border)'; e.style.background='#fff'; });
+  el.style.borderColor='var(--text)'; el.style.background='var(--surface2)';
+}
+
+function mpToggleEater(pid, el) {
+  const m = window._mpModal;
+  m.selEaters.includes(pid) ? (m.selEaters=m.selEaters.filter(x=>x!==pid)) : m.selEaters.push(pid);
+  if (!m.selEaters.length) { m.selEaters.push(pid); return; }
+  const p = getProfile(pid); if(!p) return;
+  const on = m.selEaters.includes(pid);
+  el.style.borderColor = on?p.color:'var(--border2)'; el.style.background = on?p.color:'#fff'; el.style.color = on?'#fff':'var(--text2)';
+}
+
+function mpConfirmEntry() {
+  const m = window._mpModal;
+  if (!m.selId) { alert('Please select a recipe.'); return; }
+  const servings = parseFloat(document.getElementById('mp-servings').value)||1;
+  const eaters = m.selEaters.length ? m.selEaters : getMPWeekProfiles();
+  ensureWeek(m.wk);
+  if (!mealPlan[m.wk][m.dk]) mealPlan[m.wk][m.dk]={};
+  if (!mealPlan[m.wk][m.dk][m.slot]) mealPlan[m.wk][m.dk][m.slot]=[];
+  const entry = {recipeId:m.selId, servings, eatingProfiles:[...eaters]};
+  if (m.editIdx!=null) mealPlan[m.wk][m.dk][m.slot][m.editIdx]=entry;
+  else mealPlan[m.wk][m.dk][m.slot].push(entry);
+  persistMP(); closeModal('mp-add-modal');
+  renderMPWeekGrid(getWeekDates(mpWeekOffset),m.wk); renderMPDayPanel(m.dk,m.wk);
+}
+
+function mpEditEntry(wk,dk,slot,idx) { mpOpenAddModal(wk,dk,slot,idx); }
+
+function mpRemoveEntry(wk,dk,slot,idx) {
+  mealPlan[wk]?.[dk]?.[slot]?.splice(idx,1);
+  persistMP(); renderMPWeekGrid(getWeekDates(mpWeekOffset),wk); renderMPDayPanel(dk,wk);
+}
+
+function mpCopyEntry(wk,dk,slot,idx) {
+  const entry = mealPlan[wk]?.[dk]?.[slot]?.[idx]; if(!entry) return;
+  const r = recipes.find(r=>r.id===entry.recipeId);
+  const days = getWeekDates(mpWeekOffset);
+  const DNAMES=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+  const dayOpts = days.map((d,i)=>{const k=dKey(d);return `<div onclick="mpCopyPickDay('${k}',this)" data-key="${k}" style="padding:7px 10px;border:1px solid ${k===dk?'var(--text)':'var(--border)'};border-radius:var(--radius);cursor:pointer;background:${k===dk?'var(--surface2)':'#fff'};font-size:13px;">${DNAMES[i]} ${d.getDate()}${isToday(d)?' (today)':''}</div>`;}).join('');
+  const slotOpts = MEAL_SLOTS.map(s=>`<div onclick="mpCopyPickSlot('${s}',this)" data-slot="${s}" style="padding:7px 10px;border:1px solid ${s===slot?'var(--text)':'var(--border)'};border-radius:var(--radius);cursor:pointer;background:${s===slot?'var(--surface2)':'#fff'};font-size:13px;">${s}</div>`).join('');
+
+  window._mpCopy = {srcWk:wk,srcDk:dk,srcSlot:slot,srcIdx:idx,destDk:dk,destSlot:slot};
+  showModal('mp-copy-modal',`
+    <div class="modal-title">Copy "${r?.name||'Recipe'}"</div>
+    <div class="modal-field"><label>To day</label><div class="pick-list" style="max-height:160px;" id="cp-days">${dayOpts}</div></div>
+    <div class="modal-field"><label>Meal slot</label><div class="pick-list" style="max-height:130px;" id="cp-slots">${slotOpts}</div></div>
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn btn-primary" onclick="mpConfirmCopy()">Copy</button>
+      <button class="btn btn-secondary" onclick="closeModal('mp-copy-modal')">Cancel</button>
+    </div>`);
+}
+
+function mpCopyPickDay(dk,el){window._mpCopy.destDk=dk;document.querySelectorAll('#cp-days>div').forEach(e=>{e.style.borderColor='var(--border)';e.style.background='#fff'});el.style.borderColor='var(--text)';el.style.background='var(--surface2)';}
+function mpCopyPickSlot(s,el){window._mpCopy.destSlot=s;document.querySelectorAll('#cp-slots>div').forEach(e=>{e.style.borderColor='var(--border)';e.style.background='#fff'});el.style.borderColor='var(--text)';el.style.background='var(--surface2)';}
+
+function mpConfirmCopy() {
+  const {srcWk,srcDk,srcSlot,srcIdx,destDk,destSlot} = window._mpCopy;
+  const entry = mealPlan[srcWk]?.[srcDk]?.[srcSlot]?.[srcIdx]; if(!entry) {closeModal('mp-copy-modal');return;}
+  ensureWeek(srcWk);
+  if(!mealPlan[srcWk][destDk]) mealPlan[srcWk][destDk]={};
+  if(!mealPlan[srcWk][destDk][destSlot]) mealPlan[srcWk][destDk][destSlot]=[];
+  mealPlan[srcWk][destDk][destSlot].push({...entry});
+  persistMP(); closeModal('mp-copy-modal');
+  renderMPWeekGrid(getWeekDates(mpWeekOffset),srcWk); renderMPDayPanel(mpActiveDay,srcWk);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// MACRO TRACKING STATE
+// ══════════════════════════════════════════════════════════════════════════
+const TR_KEY = 'rma_tracking_v1';
+// tracking[dateKey][profileId][entryId] = {recipeId|null, name, servings, cal, protein, carbs, fat, isCustom}
+let tracking = JSON.parse(localStorage.getItem(TR_KEY) || '{}');
+function persistTR() { localStorage.setItem(TR_KEY, JSON.stringify(tracking)); }
+
+let trWeekOffset = 0;
+let trActiveDay = null;
+let trActiveProfile = null;
+
+function getTRDay(dk, pid) {
+  if (!tracking[dk]) tracking[dk] = {};
+  if (!tracking[dk][pid]) tracking[dk][pid] = [];
+  return tracking[dk][pid];
+}
+
+function trDayMacros(dk, pid) {
+  let cal=0,pro=0,carb=0,fat=0;
+  getTRDay(dk,pid).forEach(e=>{cal+=e.cal||0;pro+=e.protein||0;carb+=e.carbs||0;fat+=e.fat||0;});
+  return {cal:Math.round(cal),protein:parseFloat(pro.toFixed(1)),carbs:parseFloat(carb.toFixed(1)),fat:parseFloat(fat.toFixed(1))};
+}
+
+function trNavWeek(dir) { trWeekOffset+=dir; trActiveDay=null; renderTracking(); }
+
+function renderTracking() {
+  const days = getWeekDates(trWeekOffset);
+  const fmt = d=>d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  document.getElementById('tr-week-label').textContent = fmt(days[0])+' – '+fmt(days[6])+', '+days[0].getFullYear();
+
+  if (!trActiveProfile || !getProfile(trActiveProfile)) trActiveProfile = profiles[0]?.id;
+  if (!trActiveDay || !days.find(d=>dKey(d)===trActiveDay)) {
+    const tod = days.find(d=>isToday(d));
+    trActiveDay = tod ? dKey(tod) : dKey(days[0]);
+  }
+
+  // Profile tabs
+  document.getElementById('tr-subtitle').innerHTML = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">
+    ${profiles.map(p=>`<span onclick="trSelectProfile(${p.id})" style="padding:4px 12px;border-radius:99px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid ${trActiveProfile===p.id?p.color:'var(--border2)'};background:${trActiveProfile===p.id?p.color:'#fff'};color:${trActiveProfile===p.id?'#fff':'var(--text2)'};">${p.name}</span>`).join('')}
+  </div>`;
+
+  renderTRWeekGrid(days);
+  renderTRDayPanel(trActiveDay);
+}
+
+function trSelectProfile(pid) { trActiveProfile=pid; renderTracking(); }
+
+function renderTRWeekGrid(days) {
+  const DNAMES=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const pid = trActiveProfile;
+  document.getElementById('tr-week-grid').innerHTML = days.map((d,i)=>{
+    const dk=dKey(d); const m=trDayMacros(dk,pid);
+    const p = getProfile(pid);
+    const goal = p?.goals.cal||2000;
+    const pct = Math.min(100,Math.round(m.cal/goal*100));
+    const isAct=dk===trActiveDay; const isTod=isToday(d);
+    return `<div onclick="trSelectDay('${dk}')" style="background:var(--surface);border:1.5px solid ${isAct?'var(--text)':isTod?'var(--accent3)':'var(--border)'};border-radius:var(--radius-lg);padding:9px 7px;cursor:pointer;min-height:95px;">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);">${DNAMES[i]}</div>
+      <div style="font-size:17px;font-weight:700;font-family:'Lora',serif;line-height:1.1;margin:1px 0 4px;">${d.getDate()}</div>
+      ${isTod?'<div style="font-size:9px;background:var(--accent3);color:#fff;border-radius:99px;padding:1px 5px;display:inline-block;margin-bottom:3px;">Today</div>':''}
+      ${m.cal>0?`<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;"><span style="font-weight:600;color:var(--text);">${m.cal}</span>/${goal}</div>
+      <div style="height:4px;background:var(--border);border-radius:99px;margin-top:3px;overflow:hidden;"><div style="height:4px;width:${pct}%;background:${p?.color||'var(--accent)'};border-radius:99px;"></div></div>`
+      :'<div style="font-size:10px;color:var(--text3);">Not logged</div>'}
+    </div>`;
+  }).join('');
+}
+
+function trSelectDay(dk) { trActiveDay=dk; renderTRWeekGrid(getWeekDates(trWeekOffset)); renderTRDayPanel(dk); }
+
+function renderTRDayPanel(dk) {
+  const pid = trActiveProfile;
+  const p = getProfile(pid); if(!p) return;
+  const d = new Date(dk+'T00:00:00');
+  const title = d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  const m = trDayMacros(dk,pid);
+  const goals = p.goals;
+  const logged = getTRDay(dk,pid);
+
+  // Goal progress bars
+  const bar = (val,goal,color) => {
+    const pct=Math.min(100,Math.round(val/goal*100));
+    return `<div style="height:5px;background:var(--border);border-radius:99px;overflow:hidden;margin-bottom:8px;"><div style="height:5px;width:${pct}%;background:${color};border-radius:99px;"></div></div>`;
+  };
+
+  // Get scheduled meals for this day to pre-populate suggestions
+  const wk = weekKey(trWeekOffset);
+  const scheduledItems = [];
+  MEAL_SLOTS.forEach(slot=>{
+    ((mealPlan[wk]||{})[dk]||{})[slot]?.forEach(e=>{
+      if ((e.eatingProfiles||getMPWeekProfiles()).includes(pid)) {
+        scheduledItems.push({...e, slot});
+      }
+    });
+  });
+
+  // Logged items
+  const loggedHtml = logged.length===0
+    ? '<p style="font-size:13px;color:var(--text3);padding:8px 0;">Nothing logged yet for this day.</p>'
+    : logged.map((e,idx)=>{
+        const calStr = e.cal!=null?Math.round(e.cal)+' kcal':'';
+        return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg);border-radius:var(--radius);margin-bottom:5px;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${e.name}</div>
+            <div style="font-size:11px;color:var(--text3);">${e.servings} serving${e.servings!==1?'s':''} · ${calStr}</div>
+          </div>
+          <div style="font-size:11px;color:var(--text2);text-align:right;min-width:120px;">P${e.protein}g C${e.carbs}g F${e.fat}g</div>
+          <div style="display:flex;gap:3px;">
+            <button class="btn-sm" onclick="trEditEntry('${dk}',${pid},${idx})">✏</button>
+            <button class="btn-sm danger" onclick="trRemoveEntry('${dk}',${pid},${idx})">×</button>
+          </div>
+        </div>`;
+      }).join('');
+
+  // Scheduled suggestions (not yet logged for this profile)
+  const loggedRecipeIds = logged.filter(e=>!e.isCustom).map(e=>e.recipeId+'_'+e.servings);
+  const suggestHtml = scheduledItems.length===0 ? ''
+    : `<div style="margin-top:14px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);margin-bottom:6px;">From today's meal plan</div>
+        ${scheduledItems.map(e=>{
+          const r=recipes.find(r=>r.id===e.recipeId); if(!r) return '';
+          const wkp = getMPWeekProfiles();
+          const perPerson = Math.round((e.servings / (e.eatingProfiles||wkp).length)*10)/10;
+          return `<div style="display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:4px;background:#fff;">
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.name}</div>
+              <div style="font-size:11px;color:var(--text3);">${e.slot} · ${perPerson} srv scheduled for you</div>
+            </div>
+            <button class="btn btn-primary" style="padding:4px 10px;font-size:12px;" onclick="trLogFromSchedule('${dk}',${pid},${e.recipeId},${perPerson})">Log</button>
+          </div>`;
+        }).join('')}
+      </div>`;
+
+  document.getElementById('tr-day-panel').innerHTML = `<div class="detail-panel">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+      <div style="font-family:'Lora',serif;font-size:19px;letter-spacing:-0.01em;">${title}</div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span style="font-size:12px;color:var(--text2);">Viewing:</span>
+        <span style="padding:3px 10px;border-radius:99px;font-size:12px;font-weight:600;background:${p.color};color:#fff;">${p.name}</span>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;">
+      <div style="background:var(--bg);border-radius:var(--radius);padding:9px;text-align:center;"><span style="font-size:16px;font-weight:700;display:block;color:var(--accent);">${m.cal}</span><div style="font-size:9px;color:var(--text3);margin-top:2px;">of ${goals.cal}</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);">kcal</div></div>
+      <div style="background:var(--bg);border-radius:var(--radius);padding:9px;text-align:center;"><span style="font-size:16px;font-weight:700;display:block;color:var(--accent2);">${m.protein}g</span><div style="font-size:9px;color:var(--text3);margin-top:2px;">of ${goals.protein}g</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);">protein</div></div>
+      <div style="background:var(--bg);border-radius:var(--radius);padding:9px;text-align:center;"><span style="font-size:16px;font-weight:700;display:block;">${m.carbs}g</span><div style="font-size:9px;color:var(--text3);margin-top:2px;">of ${goals.carbs}g</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);">carbs</div></div>
+      <div style="background:var(--bg);border-radius:var(--radius);padding:9px;text-align:center;"><span style="font-size:16px;font-weight:700;display:block;">${m.fat}g</span><div style="font-size:9px;color:var(--text3);margin-top:2px;">of ${goals.fat}g</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);">fat</div></div>
+    </div>
+    ${bar(m.cal,goals.cal,p.color)}
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text2);margin-bottom:8px;">Logged today</div>
+    ${loggedHtml}
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="trOpenLogModal('${dk}',${pid},null)">+ Log a meal</button>
+      <button class="btn btn-secondary" style="flex:1;" onclick="trOpenCustomModal('${dk}',${pid})">+ Custom item</button>
+    </div>
+    ${suggestHtml}
+  </div>`;
+}
+
+// ── Tracking: log from schedule ────────────────────────────────────────────
+function trLogFromSchedule(dk, pid, recipeId, scheduledServings) {
+  trOpenLogModal(dk, pid, {recipeId, servings: scheduledServings});
+}
+
+function trOpenLogModal(dk, pid, prefill) {
+  const selId = prefill?.recipeId || null;
+  const selSrv = prefill?.servings || 1;
+
+  const recipeList = recipes.map(r=>`<div onclick="trPickRecipe(${r.id},this)" data-id="${r.id}" style="padding:8px 10px;border:1px solid ${selId===r.id?'var(--text)':'var(--border)'};border-radius:var(--radius);cursor:pointer;background:${selId===r.id?'var(--surface2)':'#fff'};font-size:13px;">
+    <div style="font-weight:500;">${r.name}</div>
+    <div style="font-size:11px;color:var(--text3);">${hasMacros(r)?(r._overrides?.cal??r.cal)+' kcal/srv':''}</div>
+  </div>`).join('');
+
+  window._trLog = {dk, pid, selId, editIdx:null};
+  showModal('tr-log-modal',`
+    <div class="modal-title">Log a meal</div>
+    <div class="pick-list" id="tr-recipe-list">${recipeList}</div>
+    <div class="modal-field"><label>Servings eaten</label><input type="number" id="tr-log-srv" min="0" step="0.5" value="${selSrv}"/></div>
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn btn-primary" onclick="trConfirmLog()">Log</button>
+      <button class="btn btn-secondary" onclick="closeModal('tr-log-modal')">Cancel</button>
+    </div>`);
+}
+
+function trPickRecipe(id, el) {
+  window._trLog.selId=id;
+  document.querySelectorAll('#tr-recipe-list>div').forEach(e=>{e.style.borderColor='var(--border)';e.style.background='#fff';});
+  el.style.borderColor='var(--text)'; el.style.background='var(--surface2)';
+}
+
+function trConfirmLog() {
+  const {dk,pid,selId,editIdx} = window._trLog;
+  if (!selId) {alert('Please select a recipe.');return;}
+  const servings = parseFloat(document.getElementById('tr-log-srv').value)||0;
+  const r = recipes.find(r=>r.id===selId); if(!r) return;
+  const factor = servings/(r.servings||1);
+  const entry = {
+    recipeId:selId, name:r.name, servings,
+    cal: hasMacros(r)?Math.round((r._overrides?.cal??r.cal)*factor):0,
+    protein: hasMacros(r)?parseFloat(((r._overrides?.protein??r.protein||0)*factor).toFixed(1)):0,
+    carbs: hasMacros(r)?parseFloat(((r._overrides?.carbs??r.carbs||0)*factor).toFixed(1)):0,
+    fat: hasMacros(r)?parseFloat(((r._overrides?.fat??r.fat||0)*factor).toFixed(1)):0,
+    isCustom:false
+  };
+  const list = getTRDay(dk,pid);
+  editIdx!=null ? list[editIdx]=entry : list.push(entry);
+  persistTR(); closeModal('tr-log-modal'); renderTRDayPanel(dk); renderTRWeekGrid(getWeekDates(trWeekOffset));
+}
+
+function trOpenCustomModal(dk, pid, editIdx) {
+  const e = editIdx!=null ? getTRDay(dk,pid)[editIdx] : null;
+  window._trCustom = {dk,pid,editIdx:editIdx??null};
+  showModal('tr-custom-modal',`
+    <div class="modal-title">${e?'Edit':'Add custom'} item</div>
+    <div class="modal-field"><label>Name</label><input id="tc-name" value="${e?.name||''}" placeholder="e.g. Protein shake"/></div>
+    <div class="modal-field"><label>Servings</label><input type="number" id="tc-srv" min="0" step="0.5" value="${e?.servings||1}"/></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+      <div class="modal-field"><label>Calories</label><input type="number" id="tc-cal" min="0" value="${e?.cal||''}"/></div>
+      <div class="modal-field"><label>Protein (g)</label><input type="number" id="tc-pro" min="0" step="0.1" value="${e?.protein||''}"/></div>
+      <div class="modal-field"><label>Carbs (g)</label><input type="number" id="tc-carb" min="0" step="0.1" value="${e?.carbs||''}"/></div>
+      <div class="modal-field"><label>Fat (g)</label><input type="number" id="tc-fat" min="0" step="0.1" value="${e?.fat||''}"/></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="trConfirmCustom()">Save</button>
+      <button class="btn btn-secondary" onclick="closeModal('tr-custom-modal')">Cancel</button>
+    </div>`);
+}
+
+function trConfirmCustom() {
+  const name = document.getElementById('tc-name').value.trim();
+  if (!name) {alert('Please enter a name.');return;}
+  const {dk,pid,editIdx} = window._trCustom;
+  const entry = {
+    name, servings:parseFloat(document.getElementById('tc-srv').value)||1,
+    cal:parseFloat(document.getElementById('tc-cal').value)||0,
+    protein:parseFloat(document.getElementById('tc-pro').value)||0,
+    carbs:parseFloat(document.getElementById('tc-carb').value)||0,
+    fat:parseFloat(document.getElementById('tc-fat').value)||0,
+    isCustom:true
+  };
+  const list=getTRDay(dk,pid);
+  editIdx!=null?list[editIdx]=entry:list.push(entry);
+  persistTR(); closeModal('tr-custom-modal'); renderTRDayPanel(dk); renderTRWeekGrid(getWeekDates(trWeekOffset));
+}
+
+function trEditEntry(dk,pid,idx) {
+  const e=getTRDay(dk,pid)[idx]; if(!e) return;
+  e.isCustom ? trOpenCustomModal(dk,pid,idx) : (() => { window._trLog={dk,pid,selId:e.recipeId,editIdx:idx}; trOpenLogModal(dk,pid,{recipeId:e.recipeId,servings:e.servings}); })();
+}
+
+function trRemoveEntry(dk,pid,idx) {
+  getTRDay(dk,pid).splice(idx,1);
+  persistTR(); renderTRDayPanel(dk); renderTRWeekGrid(getWeekDates(trWeekOffset));
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// MODAL HELPERS
+// ══════════════════════════════════════════════════════════════════════════
+function showModal(id, html) {
+  closeModal(id);
+  document.body.insertAdjacentHTML('beforeend',
+    `<div class="overlay" id="${id}" onclick="if(event.target===this)closeModal('${id}')"><div class="modal">${html}</div></div>`);
+}
+function closeModal(id) { document.getElementById(id)?.remove(); }
+
+// ══════════════════════════════════════════════════════════════════════════
+// EXTEND showPage to handle new pages
+// ══════════════════════════════════════════════════════════════════════════
+const _origShowPage = showPage;
+showPage = function(page) {
+  _origShowPage(page);
+  if (page==='mealplan') renderMealPlan();
+  if (page==='tracking') renderTracking();
+};
 
 // ── Init ───────────────────────────────────────────────────────────────────
 renderLibrary();
