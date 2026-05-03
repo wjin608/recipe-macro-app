@@ -42,6 +42,8 @@ const COUNTABLE = {
   'ladyfinger':11, 'ladyfingers':11, 'savoiardi':11,
   cookie:16, cookies:16, biscuit:16, biscuits:16,
   cracker:7, crackers:7,
+  'egg yolk':17, 'egg yolks':17,
+  'egg white':33, 'egg whites':33,
   stalk:40, stalks:40, sprig:2, sprigs:2,
   strip:15, strips:15, slice:28, piece:50,
   'sundried tomato':5, 'sun-dried tomato':5,
@@ -70,6 +72,10 @@ const DRY_CUP_WEIGHTS = {
   // Cocoa & chocolate
   'cocoa powder':85, 'cocoa':85,
   // Grains & dry goods
+  // Milks - explicit cup weights
+  'whole milk':244, 'milk':244, '2% milk':244, 'skim milk':245,
+  'almond milk':240, 'oat milk':240, 'soy milk':243, 'buttermilk':245,
+  // Grains
   'oats':90, 'rolled oats':90, 'oatmeal':90, 'instant oats':90,
   'quick oats':90, 'steel cut oats':170,
   'breadcrumbs':108, 'bread crumbs':108,
@@ -86,6 +92,7 @@ const DRY_CUP_WEIGHTS = {
   'peanut':146, 'peanuts':146, 'sesame seed':144, 'chia seed':160,
   // Other dry
   'salt':288, 'parmesan':100, 'shredded cheese':113,
+  'peanut butter':258, 'almond butter':258, 'tahini':240,
 };
 
 // Ingredient name → specific USDA search term
@@ -125,18 +132,18 @@ const ALIASES = {
   'greek yogurt':'yogurt greek plain',
   'greek yoghurt':'yogurt greek plain',
   'parmesan':'cheese parmesan grated',
-  'mozzarella':'cheese mozzarella',
+  'mozzarella':'cheese mozzarella whole milk',
   'cheddar':'cheese cheddar',
   'feta':'cheese feta',
   'ricotta':'cheese ricotta',
   // Sugars
-  'white sugar':'sugars granulated',
-  'granulated sugar':'sugars granulated',
-  'caster sugar':'sugars granulated',
-  'cane sugar':'sugars granulated',
-  'brown sugar':'sugars brown',
-  'powdered sugar':'sugars powdered',
-  'icing sugar':'sugars powdered',
+  'white sugar':'sugars white granulated',
+  'granulated sugar':'sugars white granulated',
+  'caster sugar':'sugars white granulated',
+  'cane sugar':'sugars white granulated',
+  'brown sugar':'sugars brown packed',
+  'powdered sugar':'sugars powdered confectioners',
+  'icing sugar':'sugars powdered confectioners',
   'honey':'honey',
   'maple syrup':'syrups maple',
   // Eggs
@@ -158,10 +165,12 @@ const ALIASES = {
   'milk chocolate':'chocolate milk',
   'white chocolate':'chocolate white',
   // Oils & fats
-  'olive oil':'oil olive',
-  'vegetable oil':'oil vegetable',
+  'olive oil':'oil olive salad or cooking',
+  'vegetable oil':'oil vegetable salad or cooking',
   'coconut oil':'oil coconut',
-  'sesame oil':'oil sesame',
+  'sesame oil':'oil sesame salad or cooking',
+  'canola oil':'oil canola',
+  'sunflower oil':'oil sunflower',
   // Beverages
   'espresso':'beverages coffee brewed espresso',
   'strong coffee':'beverages coffee brewed',
@@ -174,7 +183,17 @@ const ALIASES = {
   'passata':'tomato puree',
   // Broths
   'chicken stock':'soup chicken broth',
-  'chicken broth':'soup chicken broth',
+  'chicken broth':'soup stock chicken home-prepared',
+  'chicken breast':'chicken broilers fryers breast meat only raw',
+  'chicken thigh':'chicken broilers fryers thigh meat only raw',
+  'turkey':'turkey breast meat only raw',
+  'salmon':'fish salmon atlantic raw',
+  'tuna':'fish tuna light canned water',
+  'shrimp':'crustaceans shrimp mixed species raw',
+  'chicken stock':'soup stock chicken home-prepared',
+  'beef broth':'soup stock beef home-prepared',
+  'beef stock':'soup stock beef home-prepared',
+  'vegetable broth':'soup stock vegetable home-prepared',
   'beef stock':'soup beef broth',
   'beef broth':'soup beef broth',
   'vegetable stock':'vegetable broth',
@@ -189,7 +208,8 @@ const ALIASES = {
   'steel cut oats':'oats steel cut',
   'quinoa':'quinoa',
   // Other
-  'peanut butter':'peanut butter smooth',
+  'peanut butter':'peanut butter smooth style without salt',
+  'almond butter':'nut butter almond',
   'coconut milk':'coconut milk canned',
   'water':'water tap drinking',
   'warm water':'water tap drinking',
@@ -200,6 +220,12 @@ const ALIASES = {
   'warm water':'water tap drinking',
   'cold water':'water tap drinking',
   'lukewarm water':'water tap drinking',
+  'banana':'bananas raw',
+  'apple':'apples raw with skin',
+  'tomato':'tomatoes red ripe raw',
+  'onion':'onions raw',
+  'garlic clove':'garlic raw',
+  'garlic':'garlic raw',
   'lemon juice':'lemon juice raw',
   'lime juice':'lime juice raw',
   'orange juice':'orange juice raw',
@@ -287,6 +313,8 @@ function toGrams(qty, unit, itemName) {
         'white sugar':'granulated sugar', 'cane sugar':'granulated sugar',
         'dutch process cocoa':'cocoa powder', 'cocoa':'cocoa powder',
         'unsweetened cocoa':'cocoa powder',
+        'whole milk':'milk','2% milk':'milk','skim milk':'milk',
+        'low fat milk':'milk','nonfat milk':'milk',
       };
       const resolvedName = DRY_SYNONYMS[name] || name;
       const isDryMatch = (rName, dry) =>

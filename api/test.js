@@ -363,7 +363,109 @@ function grade(result, tc) {
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────
+const HTML_DASHBOARD = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Nutrition Accuracy Test</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f5;color:#1a1a1a;padding:24px;font-size:14px;}
+h1{font-size:22px;margin-bottom:4px;}
+.sub{font-size:13px;color:#666;margin-bottom:20px;}
+.summary{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;}
+.stat{background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:12px 18px;text-align:center;min-width:90px;}
+.sv{font-size:24px;font-weight:700;display:block;}
+.sl{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.05em;margin-top:2px;}
+.green{color:#16a34a;}.red{color:#dc2626;}.orange{color:#d97706;}.blue{color:#2563eb;}
+.sec{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin:18px 0 8px;}
+.progress{height:6px;background:#e0e0e0;border-radius:99px;margin-bottom:20px;overflow:hidden;}
+.pb{height:6px;border-radius:99px;transition:width 0.3s;}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.06);}
+th{background:#f8f8f8;padding:9px 12px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:#666;border-bottom:1px solid #e0e0e0;}
+td{padding:9px 12px;border-bottom:1px solid #f0f0f0;vertical-align:top;font-size:13px;}
+tr:last-child td{border-bottom:none;}
+.pass{color:#16a34a;font-weight:600;}.fail{color:#dc2626;font-weight:600;}
+.nr{text-align:right;}.off{color:#dc2626;font-weight:600;}.ok{color:#16a34a;}
+.issue{font-size:11px;color:#dc2626;margin-top:2px;}
+.match{font-size:11px;color:#888;}
+.btn{padding:8px 18px;background:#1a1a1a;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;margin-bottom:18px;}
+.btn:hover{background:#333;}.btn:disabled{opacity:0.5;cursor:not-allowed;}
+#st{font-size:13px;color:#666;margin-left:10px;}
+</style>
+</head>
+<body>
+<h1>Nutrition Accuracy Test Suite</h1>
+<p class="sub">Tests ${TEST_CASES.length} common ingredients against known USDA values. Tolerance ±20% macros, ±10% grams.</p>
+<button class="btn" id="rb" onclick="run()">Run tests</button><span id="st"></span>
+<div id="out"></div>
+<script>
+async function run(){
+  const rb=document.getElementById('rb'),st=document.getElementById('st'),out=document.getElementById('out');
+  rb.disabled=true;rb.textContent='Running…';
+  st.textContent='Testing all ingredients against USDA (~60s)…';
+  out.innerHTML='';
+  try{
+    const r=await fetch('/api/test',{headers:{Accept:'application/json'}});
+    const d=await r.json();
+    if(d.error){st.textContent='Error: '+d.error;rb.disabled=false;rb.textContent='Run tests';return;}
+    render(d);
+    st.textContent='Done in '+d.summary.elapsed;
+  }catch(e){st.textContent='Error: '+e.message;}
+  rb.disabled=false;rb.textContent='Run tests again';
+}
+function nc(got,exp,tol=0.20){
+  if(got==null)return '<td class="nr off">—</td>';
+  const p=exp>0?Math.abs(got-exp)/exp:(got>0?1:0);
+  const c=p>tol?'off':p>tol/2?'':'ok';
+  return \`<td class="nr \${c}">\${got}<br><span style="color:#bbb;font-size:10px;">(\${exp})</span></td>\`;
+}
+function gc(got,exp){
+  const p=exp>0?Math.abs(got-exp)/exp:0;
+  return \`<td class="nr \${p>0.10?'off':'ok'}">\${got}<br><span style="color:#bbb;font-size:10px;">(\${exp})</span></td>\`;
+}
+function tbl(rows,showIssues){
+  const h=\`<thead><tr><th>Ingredient</th><th>Amount</th><th>Matched food</th><th class="nr">g</th><th class="nr">Cal</th><th class="nr">Carbs</th><th class="nr">Prot</th><th class="nr">Fat</th>\${showIssues?'<th>Issues</th>':''}</tr></thead>\`;
+  const b=rows.map(r=>{
+    const issues=r.issues&&r.issues.length?r.issues.map(i=>\`<div class="issue">• \${i}</div>\`).join(''):'';
+    const mf=r.matchedFood==='NOT FOUND'?\`<span class="fail">NOT FOUND</span>\`:\`<span class="match">\${r.matchedFood}</span>\`;
+    return \`<tr><td><strong>\${r.item}</strong></td><td>\${r.amount}</td><td>\${mf}</td>
+    \${r.grams?gc(r.grams.got,r.grams.expected):'<td class="nr off">—</td>'}
+    \${r.cal?nc(r.cal.got,r.cal.expected):'<td class="nr off">—</td>'}
+    \${r.carbs?nc(r.carbs.got,r.carbs.expected):'<td class="nr off">—</td>'}
+    \${r.protein?nc(r.protein.got,r.protein.expected):'<td class="nr off">—</td>'}
+    \${r.fat?nc(r.fat.got,r.fat.expected):'<td class="nr off">—</td>'}
+    \${showIssues?\`<td>\${issues}</td>\`:''}</tr>\`;
+  }).join('');
+  return '<table>'+h+'<tbody>'+b+'</tbody></table>';
+}
+function render(d){
+  const s=d.summary,score=parseInt(s.score);
+  const color=score>=80?'green':score>=60?'orange':'red';
+  document.getElementById('out').innerHTML=\`
+    <div class="summary">
+      <div class="stat"><span class="sv \${color}">\${s.score}</span><span class="sl">Score</span></div>
+      <div class="stat"><span class="sv green">\${s.passed}</span><span class="sl">Passed</span></div>
+      <div class="stat"><span class="sv red">\${s.failed}</span><span class="sl">Failed</span></div>
+      <div class="stat"><span class="sv orange">\${s.errors}</span><span class="sl">Errors</span></div>
+      <div class="stat"><span class="sv blue">\${s.total}</span><span class="sl">Total</span></div>
+    </div>
+    <div class="progress"><div class="pb" style="width:\${s.score};background:\${score>=80?'#16a34a':score>=60?'#d97706':'#dc2626'};"></div></div>
+    \${d.failing.length>0?\`<div class="sec">Failing (\${d.failing.length})</div>\${tbl(d.failing,true)}<br>\`:'<div class="sec">🎉 All tests passing!</div>'}
+    <div class="sec">Passing (\${d.passing.length})</div>\${tbl(d.passing,false)}\`;
+}
+</script>
+</body></html>\`;
+
 export default async function handler(req, res) {
+  // Serve HTML dashboard when visited in a browser
+  const acceptsHtml = (req.headers.accept||'').includes('text/html');
+  if (acceptsHtml && req.method === 'GET') {
+    res.setHeader('Content-Type', 'text/html');
+    return res.status(200).send(HTML_DASHBOARD);
+  }
+
   if (!USDA_API_KEY) return res.status(500).json({error:'USDA_API_KEY not set'});
 
   const startTime=Date.now();
