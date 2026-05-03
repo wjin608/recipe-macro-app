@@ -108,19 +108,6 @@ const ZERO_MACRO_INGREDIENTS = new Set([
 ]);
 
 
-// Direct USDA fdcIds for ingredients that consistently match wrong foods
-const DIRECT_FDCIDS = {
-  'brown sugar':    169655,  // Sugars, brown (SR Legacy)
-  'egg yolk':       173423,  // Egg, yolk, raw, fresh (SR Legacy)
-  'egg yolks':      173423,
-  'egg white':      173424,  // Egg, white, raw, fresh (SR Legacy)
-  'egg whites':     173424,
-  'coconut oil':    172337,  // Oil, coconut (SR Legacy)
-  'apple':          171688,  // Apples, raw, with skin (Foundation)
-  'apples':         171688,
-  'chicken breast': 171477,  // Chicken, breast, meat only, raw (SR Legacy)
-  'coconut milk':   168351,  // Coconut milk, raw (SR Legacy)
-};
 const ALIASES = {
   // Baked goods
   'ladyfinger':'cookies ladyfingers',
@@ -158,7 +145,7 @@ const ALIASES = {
   'granulated sugar':'sugars white granulated',
   'caster sugar':'sugars white granulated',
   'cane sugar':'sugars white granulated',
-  'brown sugar':'sugars brown',
+  'brown sugar':'sugars brown packed',
   'powdered sugar':'sugars powdered confectioners',
   'icing sugar':'sugars powdered confectioners',
   'honey':'honey',
@@ -201,7 +188,7 @@ const ALIASES = {
   // Broths
   'chicken stock':'soup chicken broth',
   'chicken broth':'chicken broth or bouillon dry ready-to-use',
-  'chicken breast':'chicken breast meat only raw',
+  'chicken breast':'chicken raw breast boneless',
   'chicken thigh':'chicken broilers fryers thigh meat only raw',
   'turkey':'turkey breast meat only raw',
   'salmon':'fish salmon atlantic raw',
@@ -227,7 +214,7 @@ const ALIASES = {
   // Other
   'peanut butter':'peanut butter smooth style without salt',
   'almond butter':'nut butter almond',
-  'coconut milk':'coconut milk canned',
+  'coconut milk':'coconut milk canned unsweetened',
   'water':'water tap drinking',
   'warm water':'water tap drinking',
   'cold water':'water tap drinking',
@@ -238,7 +225,7 @@ const ALIASES = {
   'cold water':'water tap drinking',
   'lukewarm water':'water tap drinking',
   'banana':'bananas raw',
-  'apple':'apples raw yellow',
+  'apple':'apples raw',
   'tomato':'tomatoes red ripe raw',
   'onion':'onions raw',
   'garlic clove':'garlic raw',
@@ -466,47 +453,7 @@ function pickBest(foods, itemName) {
   return (isZeroMacro && best) ? best : (bestScore > 0 ? best : null);
 }
 
-async function fetchByFdcId(fdcId) {
-  // Use detail endpoint with nested nutrient extraction
-  const url = USDA_BASE + '/food/' + fdcId + '?api_key=' + USDA_API_KEY;
-  const r = await fetch(url);
-  if (!r.ok) return null;
-  const food = await r.json();
-  const ns = food.foodNutrients || [];
-  const get = (...terms) => {
-    for (const t of terms) {
-      const hit = ns.find(n => {
-        const name = ((n.nutrient && n.nutrient.name) || n.nutrientName || n.name || '').toLowerCase();
-        return name.includes(t);
-      });
-      if (hit) { const v = hit.amount ?? hit.value ?? 0; if (v > 0) return v; }
-    }
-    return 0;
-  };
-  return {
-    food: { description: food.description, fdcId: food.fdcId },
-    nutrients: {
-      cal: get('energy', 'calorie'),
-      protein: get('protein'),
-      carbs: get('carbohydrate'),
-      fat: get('total lipid', 'fat'),
-    }
-  };
-}
-
 async function findFood(name) {
-  const nameLower = name.toLowerCase().trim();
-
-  // Check direct fdcId map first
-  const directEntry = Object.entries(DIRECT_FDCIDS).find(([k]) => nameLower === k || nameLower.includes(k));
-  if (directEntry) {
-    const result = await fetchByFdcId(directEntry[1]);
-    if (result) {
-      console.log(`findFood: "${name}" → direct fdcId ${directEntry[1]}: "${result.food.description}"`);
-      return result;
-    }
-  }
-
   const cleaned = cleanName(name);
   const queries = [
     cleaned,
