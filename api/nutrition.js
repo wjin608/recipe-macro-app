@@ -95,6 +95,31 @@ const ALIASES = {
   'rolled oats':'oats rolled',
   'quinoa':'quinoa cooked',
   'peanut butter smooth':'peanut butter smooth',
+  'kosher salt':'salt table',
+  'sea salt':'salt table',
+  'coarse salt':'salt table',
+  'fine salt':'salt table',
+  'table salt':'salt table',
+  'rock salt':'salt table',
+  'flaky salt':'salt table',
+  'black pepper':'spices pepper black',
+  'white pepper':'spices pepper white',
+  'cayenne pepper':'spices pepper red cayenne',
+  'red pepper flakes':'spices pepper red cayenne',
+  'chili powder':'spices chili powder',
+  'cumin':'spices cumin seed',
+  'paprika':'spices paprika',
+  'turmeric':'spices turmeric ground',
+  'cinnamon':'spices cinnamon ground',
+  'nutmeg':'spices nutmeg ground',
+  'oregano':'spices oregano dried',
+  'thyme':'spices thyme dried',
+  'rosemary':'spices rosemary dried',
+  'basil':'spices basil dried',
+  'bay leaf':'spices bay leaf',
+  'garlic powder':'spices garlic powder',
+  'onion powder':'spices onion powder',
+  'smoked paprika':'spices paprika smoked',
 };
 
 const STRIP = new Set([
@@ -185,16 +210,32 @@ async function findFood(name) {
   for (const q of queries) {
     if (!q || q.length < 2) continue;
     const foods = await usdaSearch(q);
-    if (foods.length > 0) return foods[0];
+    // Try each result until we find one with valid nutrients (handles 404 IDs)
+    for (const food of foods) {
+      try {
+        await getNutrients(food.fdcId); // test it's accessible
+        return food;
+      } catch(e) {
+        console.log(`Skipping fdcId ${food.fdcId} for "${q}": ${e.message}`);
+        continue;
+      }
+    }
   }
 
   // Last resort: include branded
   const foods = await usdaSearch(cleaned, true);
-  return foods[0] || null;
+  for (const food of foods) {
+    try {
+      await getNutrients(food.fdcId);
+      return food;
+    } catch(e) { continue; }
+  }
+  return null;
 }
 
 async function getNutrients(fdcId) {
   const r = await fetch(`${USDA_BASE}/food/${fdcId}?api_key=${USDA_API_KEY}`);
+  if (r.status === 404) throw new Error(`USDA food ID ${fdcId} not found (404)`);
   if (!r.ok) throw new Error(`USDA ${r.status}`);
   const food = await r.json();
   const ns = food.foodNutrients || [];
