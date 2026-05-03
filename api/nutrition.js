@@ -109,18 +109,17 @@ const ZERO_MACRO_INGREDIENTS = new Set([
 
 
 // Direct USDA fdcIds for ingredients that consistently match wrong foods
-// Bypasses search entirely for these items
 const DIRECT_FDCIDS = {
-  'brown sugar':    169655,  // Sugars, brown
-  'egg yolk':       173423,  // Egg, yolk, raw, fresh
+  'brown sugar':    169655,  // Sugars, brown (SR Legacy)
+  'egg yolk':       173423,  // Egg, yolk, raw, fresh (SR Legacy)
   'egg yolks':      173423,
-  'egg white':      173424,  // Egg, white, raw, fresh
+  'egg white':      173424,  // Egg, white, raw, fresh (SR Legacy)
   'egg whites':     173424,
-  'coconut oil':    172337,  // Oil, coconut
+  'coconut oil':    172337,  // Oil, coconut (SR Legacy)
   'apple':          171688,  // Apples, raw, with skin (Foundation)
   'apples':         171688,
-  'chicken breast': 171477,  // Chicken, broilers or fryers, breast, meat only, raw
-  'coconut milk':   175217,  // Coconut milk, canned (coconut products)
+  'chicken breast': 171477,  // Chicken, breast, meat only, raw (SR Legacy)
+  'coconut milk':   168351,  // Coconut milk, raw (SR Legacy)
 };
 const ALIASES = {
   // Baked goods
@@ -468,26 +467,15 @@ function pickBest(foods, itemName) {
 }
 
 async function fetchByFdcId(fdcId) {
-  const url = USDA_BASE + '/food/' + fdcId + '?api_key=' + USDA_API_KEY;
+  // Use /foods list endpoint — returns same inline nutrient format as search (reliable)
+  const nids = [...NUTRIENT_IDS.cal,...NUTRIENT_IDS.protein,...NUTRIENT_IDS.carbs,...NUTRIENT_IDS.fat].join('&nutrients=');
+  const url = USDA_BASE + '/foods?fdcIds=' + fdcId + '&nutrients=' + nids + '&api_key=' + USDA_API_KEY;
   const r = await fetch(url);
   if (!r.ok) return null;
-  const food = await r.json();
-  const ns = food.foodNutrients || [];
-  const getName = n => (n.nutrient && n.nutrient.name) || n.nutrientName || n.name || '';
-  const getValue = n => n.amount ?? n.value ?? 0;
-  const get = (...terms) => {
-    for (const t of terms) {
-      const hit = ns.find(n => getName(n).toLowerCase().includes(t));
-      if (hit) { const v = getValue(hit); if (v > 0) return v; }
-    }
-    return 0;
-  };
-  let nutrients = { cal: get('energy','calorie'), protein: get('protein'), carbs: get('carbohydrate'), fat: get('total lipid','fat') };
-  if (!nutrients.cal) {
-    const getById = (ids) => { for (const id of ids) { const hit = ns.find(n => n.nutrientId === id || n.nutrientNumber === String(id)); if (hit && hit.value > 0) return hit.value; } return 0; };
-    nutrients = { cal: getById(NUTRIENT_IDS.cal), protein: getById(NUTRIENT_IDS.protein), carbs: getById(NUTRIENT_IDS.carbs), fat: getById(NUTRIENT_IDS.fat) };
-  }
-  return { food: { description: food.description, fdcId: food.fdcId }, nutrients };
+  const foods = await r.json();
+  if (!foods || !foods.length) return null;
+  const food = foods[0];
+  return { food: { description: food.description, fdcId: food.fdcId }, nutrients: extractNutrients(food) };
 }
 
 async function findFood(name) {

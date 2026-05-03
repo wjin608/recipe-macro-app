@@ -515,8 +515,14 @@ async function recalcMacros(i){
   try{
     const ingLines=r.ingredients.map(ing=>`${ing.rawAmount||ing.amount||''} ${ing.item}`).join('\n');
     const macros=await calculateMacros(r.name,r.servings,ingLines,r.ingredients);
+    const newIngs=mergeWithMacros(r.ingredients,macros);
+    // Preserve ingredient overrides
+    r.ingredients.forEach((oldIng,idx)=>{
+      if(oldIng._overrides&&newIngs[idx]) newIngs[idx]._overrides={...oldIng._overrides};
+    });
     recipes[i]={...r,cal:macros.cal,protein:macros.protein,carbs:macros.carbs,fat:macros.fat,
-      ingredients:mergeWithMacros(r.ingredients,macros)};
+      ingredients:newIngs};
+    recalcFromIngredients(i);
     persist();renderDetail(i);
     crossCheckMacros(i);
   }catch(e){
@@ -546,6 +552,12 @@ async function saveEdit(){
   let macros=null;
   try{const ingLines=ings.map(ing=>`${ing.amount} ${ing.item}`).join('\n');macros=await calculateMacros(name,srvInfo.servings,ingLines,ings);}catch(e){}
   const mergedIngs=macros?mergeWithMacros(ings,macros):ings;
+  // Preserve any existing ingredient overrides by matching on item name
+  const oldIngs=recipes[i].ingredients||[];
+  mergedIngs.forEach((ing,idx)=>{
+    const oldIng=oldIngs.find(o=>o.item===ing.item)||oldIngs[idx];
+    if(oldIng&&oldIng._overrides) ing._overrides={...oldIng._overrides};
+  });
   recipes[i]={...recipes[i],name,time:time||'—',category:newCat,...srvInfo,
     cal:macros?macros.cal:recipes[i].cal,protein:macros?macros.protein:recipes[i].protein,
     carbs:macros?macros.carbs:recipes[i].carbs,fat:macros?macros.fat:recipes[i].fat,
@@ -555,6 +567,8 @@ async function saveEdit(){
     sourceUrl:document.getElementById('e-source-url').value.trim()||recipes[i].sourceUrl||'',
     photo:document.getElementById('e-photo-input')._photoData||recipes[i].photo||'',
     _curSrv:srvInfo.servings};
+  // Re-apply ingredient overrides to recipe totals
+  recalcFromIngredients(i);
   persist();btn.disabled=false;btn.textContent='Save & recalculate macros';statusEl.innerHTML='';
   detailIdx=i;showPage('detail');
   if(macros) crossCheckMacros(i);
