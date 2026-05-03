@@ -159,6 +159,18 @@ h1,h2,h3{font-family:'Lora',serif;}
 .upload-drop svg{display:block;margin:0 auto 10px;color:var(--text3);}
 .source-tag{display:inline-block;font-size:11px;padding:2px 7px;border-radius:99px;background:#e8f0fb;color:#1a4a8a;margin-left:5px;vertical-align:middle;}
 
+.photo-upload-area{border:1.5px dashed var(--border2);border-radius:var(--radius);padding:20px;text-align:center;cursor:pointer;color:var(--text2);font-size:13px;background:#fff;transition:background 0.15s;}
+.photo-upload-area:hover{background:var(--surface2);}
+.photo-preview{position:relative;display:inline-block;margin-top:10px;}
+.photo-preview img{width:100%;max-height:260px;object-fit:cover;border-radius:var(--radius);display:block;}
+.photo-remove{position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.55);color:#fff;border:none;border-radius:50%;width:26px;height:26px;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;}
+.recipe-photo{width:100%;max-height:300px;object-fit:cover;border-radius:var(--radius);margin-bottom:20px;display:block;}
+.detail-notes{font-size:14px;line-height:1.7;color:var(--text2);white-space:pre-wrap;background:var(--surface2);border-radius:var(--radius);padding:14px 16px;margin-bottom:8px;}
+.detail-source{font-size:13px;color:var(--text2);padding:10px 0 4px;}
+.detail-source a{color:var(--accent3);word-break:break-all;}
+.cat-group-title{font-family:'Lora',serif;font-size:18px;letter-spacing:-0.01em;color:var(--text);margin:28px 0 12px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+.cat-group-title:first-child{margin-top:0;}
+
 @media(max-width:768px){
   #layout{grid-template-columns:1fr;}
   #sidebar{display:none;}
@@ -476,7 +488,12 @@ async function saveManual(calcMacros){
   recipes.push({name,time:time||'—',category:selectedCat.m||'',id:Date.now(),...srvInfo,
     cal:macros?macros.cal:null,protein:macros?macros.protein:null,
     carbs:macros?macros.carbs:null,fat:macros?macros.fat:null,
-    ingredients:mergedIngs,steps:parseSteps(document.getElementById('m-steps').value),source:'manual'});
+    ingredients:mergedIngs,
+    steps:parseSteps(document.getElementById('m-steps').value),
+    notes:document.getElementById('m-notes').value.trim()||'',
+    sourceUrl:document.getElementById('m-source-url').value.trim()||'',
+    photo:document.getElementById('m-photo-input')._photoData||'',
+    source:'manual'});
   persist();btn.disabled=false;btn.textContent='Save & calculate macros';showPage('library');
 }
 
@@ -519,7 +536,12 @@ async function saveEdit(){
   recipes[i]={...recipes[i],name,time:time||'—',category:newCat,...srvInfo,
     cal:macros?macros.cal:recipes[i].cal,protein:macros?macros.protein:recipes[i].protein,
     carbs:macros?macros.carbs:recipes[i].carbs,fat:macros?macros.fat:recipes[i].fat,
-    ingredients:mergedIngs,steps:parseSteps(document.getElementById('e-steps').value),_curSrv:srvInfo.servings};
+    ingredients:mergedIngs,
+    steps:parseSteps(document.getElementById('e-steps').value),
+    notes:document.getElementById('e-notes').value.trim()||'',
+    sourceUrl:document.getElementById('e-source-url').value.trim()||recipes[i].sourceUrl||'',
+    photo:document.getElementById('e-photo-input')._photoData||recipes[i].photo||'',
+    _curSrv:srvInfo.servings};
   persist();btn.disabled=false;btn.textContent='Save & recalculate macros';statusEl.innerHTML='';
   detailIdx=i;showPage('detail');
 }
@@ -535,10 +557,12 @@ function buildEntry(r,macros,source,extra={}){
     carbs: macros ? macros.carbs : null,
     fat: macros ? macros.fat : null,
     category:'',
+    notes: r.notes || '',
+    photo: r.photo || '',
     servingUnit:'person',
     servingLabel:`${r.servings} person${r.servings!==1?'s':''}`,
     source, id:Date.now(),
-    ...extra
+    ...extra  // sourceUrl from URL import comes through extra
   };
 }
 function mergeWithMacros(ings,macros){
@@ -604,6 +628,32 @@ function showPage(page){
   if(page==='add'&&editingIdx===null)initAddForm();
 }
 
+// ── Photo helpers ────────────────────────────────────────────────────────
+function handlePhotoUpload(evt, prefix) {
+  const file = evt.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const data = e.target.result;
+    evt.target._photoData = data;
+    document.getElementById(`${prefix}-photo-wrap`).innerHTML = `
+      <div class="photo-preview">
+        <img src="${data}" alt="Recipe photo"/>
+        <button class="photo-remove" onclick="removePhoto('${prefix}')">×</button>
+      </div>
+      <input type="file" id="${prefix}-photo-input" accept="image/*" style="display:none" onchange="handlePhotoUpload(event,'${prefix}')"/>`;
+    document.getElementById(`${prefix}-photo-input`)._photoData = data;
+  };
+  reader.readAsDataURL(file);
+}
+
+function removePhoto(prefix) {
+  document.getElementById(`${prefix}-photo-wrap`).innerHTML = `
+    <div class="photo-upload-area" onclick="document.getElementById('${prefix}-photo-input').click()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;margin:0 auto 6px;"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>Upload a photo
+    </div>
+    <input type="file" id="${prefix}-photo-input" accept="image/*" style="display:none" onchange="handlePhotoUpload(event,'${prefix}')"/>`;
+}
+
 function renderLibrary(){
   const filtered=filterCat==='All'?recipes:recipes.filter(r=>(r.category||'')===filterCat);
   document.getElementById('library-title').textContent=filterCat==='All'?'All Recipes':filterCat;
@@ -614,16 +664,44 @@ function renderLibrary(){
     grid.innerHTML='<div class="empty-state"><h2>No recipes yet</h2><p>Click "+ Add Recipe" to get started.</p></div>';return;
   }
   if(filtered.length===0){grid.innerHTML='<div class="empty-state"><h2>No recipes in this category</h2></div>';return;}
-  grid.innerHTML=filtered.map(r=>{
+
+  const makeCard = r => {
     const i=recipes.indexOf(r);
     const [bg,color]=r.category?catColor(r.category):['#f0ede6','#6b6560'];
-    const catPill=r.category?`<span style="background:${bg};color:${color};font-size:11px;padding:2px 7px;border-radius:99px;margin-right:4px;">${r.category}</span>`:'';
     const srcBadge=r.source==='url'?'<span class="source-tag">web</span>':'';
+    const photoTop=r.photo?`<img src="${r.photo}" alt="${r.name}" style="width:100%;height:140px;object-fit:cover;border-radius:var(--radius) var(--radius) 0 0;display:block;margin:-16px -16px 12px;width:calc(100% + 32px);">`:'' ;
     const macRow=hasMacros(r)
       ?`<div class="rc-macros"><div class="rc-mac"><span class="rc-mac-val cal">${Math.round(r.cal)}</span><span class="rc-mac-label">kcal</span></div><div class="rc-mac"><span class="rc-mac-val pro">${Math.round(r.protein)}g</span><span class="rc-mac-label">prot</span></div><div class="rc-mac"><span class="rc-mac-val">${Math.round(r.carbs)}g</span><span class="rc-mac-label">carbs</span></div><div class="rc-mac"><span class="rc-mac-val">${Math.round(r.fat)}g</span><span class="rc-mac-label">fat</span></div></div>`
       :'<div class="no-macro-pill">Macros not calculated</div>';
-    return `<div class="recipe-card"><div class="rc-name" onclick="detailIdx=${i};showPage('detail')">${r.name}</div><div class="rc-meta" style="margin-bottom:5px;">${catPill}${srcBadge}</div><div class="rc-meta">${r.servingLabel||r.servings+' servings'} · ${r.time||'—'}</div>${macRow}<div class="rc-actions"><button class="btn-sm" onclick="detailIdx=${i};showPage('detail')">View</button><button class="btn-sm" onclick="openEdit(${i})">Edit</button><button class="btn-sm danger" onclick="deleteRecipe(${i})">Delete</button></div></div>`;
-  }).join('');
+    return `<div class="recipe-card">${photoTop}<div class="rc-name" onclick="detailIdx=${i};showPage('detail')">${r.name}</div><div class="rc-meta" style="margin-bottom:5px;">${srcBadge}</div><div class="rc-meta">${r.servingLabel||r.servings+' servings'} · ${r.time||'—'}</div>${macRow}<div class="rc-actions"><button class="btn-sm" onclick="detailIdx=${i};showPage('detail')">View</button><button class="btn-sm" onclick="openEdit(${i})">Edit</button><button class="btn-sm danger" onclick="deleteRecipe(${i})">Delete</button></div></div>`;
+  };
+
+  if(filterCat !== 'All'){
+    // Single category — show flat grid
+    grid.innerHTML = filtered.map(makeCard).join('');
+  } else {
+    // All recipes — group by category
+    const groups = {};
+    const noCat = [];
+    filtered.forEach(r => {
+      const cat = r.category || '';
+      if(!cat){ noCat.push(r); return; }
+      if(!groups[cat]) groups[cat] = [];
+      groups[cat].push(r);
+    });
+    // Sort categories alphabetically, uncategorised last
+    const sortedCats = Object.keys(groups).sort();
+    let html = '';
+    sortedCats.forEach(cat => {
+      html += `<div class="cat-group-title" style="grid-column:1/-1;">${cat}</div>`;
+      html += groups[cat].map(makeCard).join('');
+    });
+    if(noCat.length > 0){
+      html += `<div class="cat-group-title" style="grid-column:1/-1;">Uncategorised</div>`;
+      html += noCat.map(makeCard).join('');
+    }
+    grid.innerHTML = html;
+  }
 }
 
 function renderSidebarFilters(){
@@ -661,13 +739,17 @@ function renderDetail(i){
     return `<div class="ing-detail-row"><span>${ing.item}</span><div class="ing-detail-right"><div class="ing-detail-amt">${scaledAmt}</div>${macLine}</div></div>`;
   }).join('');
   const steps=r.steps&&r.steps.length?`<div class="detail-section">Instructions</div><ol class="steps-list">${r.steps.map((s,j)=>`<li><div class="step-num">${j+1}</div><span>${s}</span></li>`).join('')}</ol>`:'';
+  const notesSection=r.notes?`<div class="detail-section">Notes</div><div class="detail-notes">${r.notes}</div>`:'';
+  const sourceSection=r.sourceUrl?`<div class="detail-section">Recipe source</div><div class="detail-source"><a href="${r.sourceUrl}" target="_blank">${r.sourceUrl}</a></div>`:'';
+  const photoSection=r.photo?`<img src="${r.photo}" alt="${r.name}" class="recipe-photo"/>`:'';
   document.getElementById('detail-content').innerHTML=`
     <div class="detail-header"><div><h1 class="detail-title">${r.name}${catBadge}</h1><div class="detail-meta">${r.servingLabel||r.servings+' servings'} · ${r.time||'—'}</div></div><button class="btn btn-secondary" onclick="openEdit(${i})">Edit recipe</button></div>
     ${srcNote}
+    ${photoSection}
     <div class="srv-slider-row"><label>Servings</label><input type="range" min="1" max="20" step="1" value="${curSrv}" oninput="onServ(${i},this.value)"/><span class="srv-count" id="srv-label">${curSrv}</span></div>
     ${macroSection}
     <div class="detail-section">Ingredients <span id="ing-scale-note">scaled to ${curSrv} serving${curSrv!==1?'s':''}</span></div>
-    <div class="ing-detail-list" id="ing-list">${ings}</div>${steps}`;
+    <div class="ing-detail-list" id="ing-list">${ings}</div>${steps}${notesSection}${sourceSection}`;
 }
 
 function onServ(i,v){
@@ -708,7 +790,16 @@ function buildFormFields(prefix,r){
     <div class="form-section-title">Ingredients *</div>
     <div class="ing-table"><div class="ing-header"><span>Ingredient</span><span>Amount</span><span>Unit</span><span></span></div><div id="${prefix}-ing-rows">${ingRows}</div><button class="add-ing-btn" onclick="addIngRow('${prefix}')">+ Add ingredient</button></div>
     <div class="form-section-title">Instructions (optional)</div>
-    <div class="field"><textarea id="${prefix}-steps" placeholder="1. Separate eggs...&#10;2. Whisk yolks...">${r?(r.steps||[]).map((s,j)=>`${j+1}. ${s}`).join('\n'):''}</textarea></div>`;
+    <div class="field"><textarea id="${prefix}-steps" placeholder="1. Separate eggs...&#10;2. Whisk yolks...">${r?(r.steps||[]).map((s,j)=>`${j+1}. ${s}`).join('\n'):''}</textarea></div>
+    <div class="form-section-title">Notes (optional)</div>
+    <div class="field"><textarea id="${prefix}-notes" placeholder="Storage tips, variations, substitutions...">${r?r.notes||'':''}</textarea></div>
+    <div class="form-section-title">Recipe source (optional)</div>
+    <div class="field"><input type="text" id="${prefix}-source-url" placeholder="https://..." value="${r?r.sourceUrl||'':''}"/></div>
+    <div class="form-section-title">Photo (optional)</div>
+    <div id="${prefix}-photo-wrap">
+      ${r&&r.photo?`<div class="photo-preview"><img src="${r.photo}" alt="Recipe photo"/><button class="photo-remove" onclick="removePhoto('${prefix}')">×</button></div>`:`<div class="photo-upload-area" onclick="document.getElementById('${prefix}-photo-input').click()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;margin:0 auto 6px;"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>Upload a photo</div>`}
+      <input type="file" id="${prefix}-photo-input" accept="image/*" style="display:none" onchange="handlePhotoUpload(event,'${prefix}')"/>
+    </div>`;
 }
 
 function initAddForm(){
