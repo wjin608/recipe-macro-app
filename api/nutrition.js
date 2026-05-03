@@ -171,7 +171,7 @@ const ALIASES = {
   // Oils & fats
   'olive oil':'oil olive salad or cooking',
   'vegetable oil':'oil vegetable salad or cooking',
-  'coconut oil':'oil coconut',
+  'coconut oil':'oil coconut salad cooking',
   'sesame oil':'oil sesame salad or cooking',
   'canola oil':'oil canola',
   'sunflower oil':'oil sunflower',
@@ -214,7 +214,7 @@ const ALIASES = {
   // Other
   'peanut butter':'peanut butter smooth style without salt',
   'almond butter':'nut butter almond',
-  'coconut milk':'coconut milk canned unsweetened',
+  'coconut milk':'coconut milk',
   'water':'water tap drinking',
   'warm water':'water tap drinking',
   'cold water':'water tap drinking',
@@ -225,7 +225,7 @@ const ALIASES = {
   'cold water':'water tap drinking',
   'lukewarm water':'water tap drinking',
   'banana':'bananas raw',
-  'apple':'apples raw',
+  'apple':'apples raw skin',
   'tomato':'tomatoes red ripe raw',
   'onion':'onions raw',
   'garlic clove':'garlic raw',
@@ -349,7 +349,7 @@ function toGrams(qty, unit, itemName) {
   if (countableUnits.has(u) || u === '') {
     // Try to match item name against COUNTABLE table
     for (const [k,v] of Object.entries(COUNTABLE).sort((a,b)=>b[0].length-a[0].length)) {
-      if (name.includes(k) || k.includes(name.split(' ')[0])) {
+      if (name.includes(k)) {
         return { grams: qty * v, qty, unit: u };
       }
     }
@@ -369,7 +369,7 @@ function estimateGrams(name, qty, unit) {
   const combined = (u + ' ' + n).trim();
   const nameWithUnit = (n + ' ' + u).trim();
   for (const [k,v] of Object.entries(COUNTABLE).sort((a,b)=>b[0].length-a[0].length)) {
-    if (combined.includes(k) || nameWithUnit.includes(k) || n.includes(k)) return qty * v;
+    if (n.includes(k) || combined.includes(k) || nameWithUnit.includes(k)) return qty * v;
   }
 
   // Descriptor words used as units (e.g. "2 large" eggs)
