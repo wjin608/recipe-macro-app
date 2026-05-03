@@ -240,20 +240,42 @@ async function getNutrients(fdcId) {
   const food = await r.json();
   const ns = food.foodNutrients || [];
 
+  // USDA returns nutrients in different shapes depending on data type:
+  // SR Legacy / Foundation: { nutrient: { name, number }, amount }
+  // Branded: { nutrientName, value }
+  // Search results: { nutrientName, value }
+  // We handle all three shapes here
+  const getName = n =>
+    (n.nutrient && n.nutrient.name) ||
+    n.nutrientName ||
+    n.name ||
+    '';
+
+  const getValue = n =>
+    n.amount ?? n.value ?? 0;
+
   const get = (...terms) => {
     for (const term of terms) {
-      const hit = ns.find(n => (n.nutrientName||n.name||'').toLowerCase().includes(term));
-      if (hit) { const v = hit.value ?? hit.amount ?? 0; if (v > 0) return v; }
+      const hit = ns.find(n => getName(n).toLowerCase().includes(term));
+      if (hit) {
+        const v = getValue(hit);
+        if (v > 0) return v;
+      }
     }
     return 0;
   };
 
-  return {
+  const result = {
     cal: get('energy','calorie'),
     protein: get('protein'),
     carbs: get('carbohydrate'),
     fat: get('total lipid','fat'),
   };
+
+  // Debug log to verify extraction
+  console.log(`fdcId ${fdcId} nutrients:`, JSON.stringify(result), '| sample field:', JSON.stringify(ns[0]));
+
+  return result;
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────
