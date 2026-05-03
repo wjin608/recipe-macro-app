@@ -20,12 +20,30 @@ const TO_GRAMS = {
 // Countable item default weights (grams each)
 const COUNTABLE = {
   egg:50, eggs:50,
-  'chicken breast':174, 'chicken thigh':130,
+  'chicken breast':174, 'chicken thigh':130, 'chicken drumstick':110,
   banana:118, apple:182, orange:131,
-  lemon:84, lime:67,
-  tomato:123, onion:110, potato:213, carrot:61,
+  lemon:84, lime:67, tomato:123,
+  onion:110, 'red onion':110, shallot:30,
+  potato:213, 'sweet potato':130, carrot:61,
   clove:5, cloves:5,
-  slice:28, piece:100, stalk:40, sprig:2,
+  'bay leaf':0.6, 'bay leaves':0.6,
+  'ladyfinger':11, 'ladyfingers':11, 'savoiardi':11,
+  'cookie':16, 'cookies':16, 'biscuit':16, 'biscuits':16,
+  'cracker':7, 'crackers':7,
+  stalk:40, stalks:40, sprig:2, sprigs:2,
+  strip:15, strips:15, slice:28, piece:50,
+};
+
+// Liquid density (g/ml) for common ingredients when volume is given
+const LIQUID_DENSITY = {
+  'milk':1.03, 'cream':1.01, 'heavy cream':1.01, 'whipping cream':1.01,
+  'double cream':1.01, 'sour cream':0.96, 'yogurt':1.04,
+  'oil':0.92, 'olive oil':0.92, 'vegetable oil':0.92, 'coconut oil':0.92,
+  'butter':0.91, 'honey':1.42, 'maple syrup':1.32, 'molasses':1.4,
+  'water':1.0, 'broth':1.0, 'stock':1.0,
+  'coffee':1.0, 'espresso':1.0, 'juice':1.05,
+  'vinegar':1.01, 'soy sauce':1.18, 'fish sauce':1.17,
+  'condensed milk':1.3, 'coconut milk':1.02,
 };
 
 // Recipe name → USDA search term
@@ -130,44 +148,82 @@ const STRIP = new Set([
 ]);
 
 // ── Helpers ───────────────────────────────────────────────────────────────
-function parseAmount(str) {
+function parseAmount(str, itemName) {
   if (!str) return { grams: null, qty: 1, unit: '' };
   let s = str.trim().toLowerCase()
     .replace(/½/g,'0.5').replace(/¼/g,'0.25').replace(/¾/g,'0.75')
     .replace(/⅓/g,'0.333').replace(/⅔/g,'0.667').replace(/⅛/g,'0.125');
 
+  let qty, unit;
+
   // "1 1/2 cups"
   let m = s.match(/^(\d+)\s+(\d+)\/(\d+)\s*(.*)/);
-  if (m) return toG(parseFloat(m[1]) + parseFloat(m[2])/parseFloat(m[3]), m[4].split(/\s/)[0]);
+  if (m) { qty = parseFloat(m[1]) + parseFloat(m[2])/parseFloat(m[3]); unit = m[4].trim().split(/\s/)[0]; }
 
   // "1/2 cup"
-  m = s.match(/^(\d+)\/(\d+)\s*(.*)/);
-  if (m) return toG(parseFloat(m[1])/parseFloat(m[2]), m[3].split(/\s/)[0]);
-
+  else if ((m = s.match(/^(\d+)\/(\d+)\s*(.*)/))) {
+    qty = parseFloat(m[1])/parseFloat(m[2]); unit = m[3].trim().split(/\s/)[0];
+  }
   // "2-3 tbsp"
-  m = s.match(/^([\d.]+)\s*[-–]\s*([\d.]+)\s*(.*)/);
-  if (m) return toG((parseFloat(m[1])+parseFloat(m[2]))/2, m[3].split(/\s/)[0]);
+  else if ((m = s.match(/^([\d.]+)\s*[-–]\s*([\d.]+)\s*(.*)/))) {
+    qty = (parseFloat(m[1])+parseFloat(m[2]))/2; unit = m[3].trim().split(/\s/)[0];
+  }
+  // "200 g" or "200" or "2 large eggs"
+  else if ((m = s.match(/^([\d.]+)\s*(.*)/))) {
+    qty = parseFloat(m[1]);
+    // Get first word of remainder as unit, ignore descriptors like "large", "whole"
+    const remainder = m[2].trim().split(/\s/);
+    unit = remainder[0].replace(/[.,]$/,'');
+  }
+  else return { grams: null, qty: 1, unit: '' };
 
-  // "200 g"
-  m = s.match(/^([\d.]+)\s*(.*)/);
-  if (m) return toG(parseFloat(m[1]), m[2].split(/\s/)[0].replace(/[.,]$/,''));
-
-  return { grams: null, qty: 1, unit: '' };
+  return toG(qty, unit, itemName);
 }
 
-function toG(qty, unit) {
+function toG(qty, unit, itemName) {
   const u = (unit||'').toLowerCase().replace(/[.,]$/,'');
-  const f = TO_GRAMS[u] ?? TO_GRAMS[u.replace(/s$/,'')];
-  if (f != null) return { grams: qty * f, qty, unit: u };
+  const name = (itemName||'').toLowerCase();
+
+  // Direct weight unit
+  let f = TO_GRAMS[u] ?? TO_GRAMS[u.replace(/s$/, '')];
+  if (f != null) {
+    let grams = qty * f;
+    // Apply liquid density for volume units if we know the ingredient density
+    if (['cup','cups','tbsp','tablespoon','tablespoons','tsp','teaspoon','teaspoons','ml','l','liter','liters'].includes(u)) {
+      for (const [liquid, density] of Object.entries(LIQUID_DENSITY)) {
+        if (name.includes(liquid)) { grams = grams * density; break; }
+      }
+    }
+    return { grams, qty, unit: u };
+  }
+
+  // Countable unit (piece, slice, etc.) — use COUNTABLE table keyed by item name
+  const countableUnits = new Set(['piece','pieces','slice','slices','sheet','sheets','strip','strips','cookie','cookies','biscuit','biscuits','cracker','crackers','stalk','stalks','sprig','sprigs','strip','strips','clove','cloves']);
+  if (countableUnits.has(u)) {
+    // Try to find the item in COUNTABLE
+    for (const [k,v] of Object.entries(COUNTABLE)) {
+      if (name.includes(k) || k.includes(name.split(' ')[0])) return { grams: qty * v, qty, unit: u };
+    }
+    // Generic countable fallback by unit
+    const unitDefaults = { piece:50, pieces:50, slice:28, slices:28, sheet:3, strip:15, cookie:16, biscuit:16, cracker:7, stalk:40, sprig:2, clove:5 };
+    const fallback = unitDefaults[u] ?? unitDefaults[u.replace(/s$/,'')] ?? 30;
+    return { grams: qty * fallback, qty, unit: u };
+  }
+
+  // No unit or unknown unit — treat as countable item
   return { grams: null, qty, unit: u };
 }
 
-function estimateGrams(name, qty) {
+function estimateGrams(name, qty, unit) {
   const n = name.toLowerCase();
+  // Check COUNTABLE table
   for (const [k,v] of Object.entries(COUNTABLE)) {
     if (n.includes(k)) return qty * v;
   }
-  return qty * 100;
+  // If unit looks like a descriptor (large, medium, small, whole) default to common weights
+  const descriptors = { large:150, medium:100, small:70, whole:100 };
+  if (unit && descriptors[unit.toLowerCase()]) return qty * descriptors[unit.toLowerCase()];
+  return qty * 100; // generic fallback
 }
 
 function cleanName(raw) {
@@ -306,9 +362,9 @@ export default async function handler(req, res) {
 
     try {
       // Parse amount
-      const parsed = parseAmount(rawAmount || '');
+      const parsed = parseAmount(rawAmount || '', item);
       let grams = parsed.grams;
-      if (!grams && parsed.qty) grams = estimateGrams(item, parsed.qty);
+      if (!grams && parsed.qty) grams = estimateGrams(item, parsed.qty, parsed.unit);
       if (!grams || grams <= 0) grams = 100;
 
       // USDA lookup
