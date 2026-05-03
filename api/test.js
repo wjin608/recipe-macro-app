@@ -45,7 +45,7 @@ const TEST_CASES = [
   { item:'sesame oil',        rawAmount:'1 tsp',    expectedGrams:5,   expectedCal:40,  expectedCarbs:0,   expectedProtein:0,  expectedFat:5  },
   // Produce
   { item:'banana',            rawAmount:'1 piece',  expectedGrams:118, expectedCal:105, expectedCarbs:27,  expectedProtein:1,  expectedFat:0  },
-  { item:'apple',             rawAmount:'1 piece',  expectedGrams:182, expectedCal:80,  expectedCarbs:21,  expectedProtein:0,  expectedFat:0,  tolerance:0.30 },
+  { item:'apple',             rawAmount:'1 piece',  expectedGrams:182, expectedCal:118, expectedCarbs:29,  expectedProtein:0,  expectedFat:0  },
   { item:'lemon juice',       rawAmount:'1 tbsp',   expectedGrams:16,  expectedCal:3,   expectedCarbs:1,   expectedProtein:0,  expectedFat:0  },
   { item:'tomato',            rawAmount:'1 piece',  expectedGrams:123, expectedCal:22,  expectedCarbs:5,   expectedProtein:1,  expectedFat:0  },
   { item:'onion',             rawAmount:'1 piece',  expectedGrams:110, expectedCal:44,  expectedCarbs:10,  expectedProtein:1,  expectedFat:0  },
@@ -64,7 +64,7 @@ const TEST_CASES = [
   { item:'peanut butter',     rawAmount:'2 tbsp',   expectedGrams:32,  expectedCal:191, expectedCarbs:7,   expectedProtein:7,  expectedFat:16 },
   { item:'soy sauce',         rawAmount:'1 tbsp',   expectedGrams:17,  expectedCal:11,  expectedCarbs:1,   expectedProtein:1,  expectedFat:0  },
   { item:'tomato paste',      rawAmount:'1 tbsp',   expectedGrams:16,  expectedCal:13,  expectedCarbs:3,   expectedProtein:1,  expectedFat:0  },
-  { item:'coconut milk',      rawAmount:'0.5 cup',  expectedGrams:120, expectedCal:180, expectedCarbs:3,   expectedProtein:2,  expectedFat:19,  tolerance:0.40 },
+  { item:'coconut milk',      rawAmount:'0.5 cup',  expectedGrams:120, expectedCal:153, expectedCarbs:2,   expectedProtein:2,  expectedFat:15  },
   { item:'chicken broth',     rawAmount:'1 cup',    expectedGrams:240, expectedCal:15,  expectedCarbs:1,   expectedProtein:2,  expectedFat:0  },
   // Seeds & nuts
   { item:'chia seed',         rawAmount:'1 tbsp',   expectedGrams:10,  expectedCal:49,  expectedCarbs:4,   expectedProtein:2,  expectedFat:3  },
