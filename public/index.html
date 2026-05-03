@@ -1720,9 +1720,9 @@ function trConfirmLog() {
   const entry = {
     recipeId:selId, name:r.name, servings,
     cal: hasMacros(r)?Math.round((r._overrides?.cal??r.cal)*factor):0,
-    protein: hasMacros(r)?parseFloat(((r._overrides?.protein??r.protein||0)*factor).toFixed(1)):0,
-    carbs: hasMacros(r)?parseFloat(((r._overrides?.carbs??r.carbs||0)*factor).toFixed(1)):0,
-    fat: hasMacros(r)?parseFloat(((r._overrides?.fat??r.fat||0)*factor).toFixed(1)):0,
+    protein: hasMacros(r)?parseFloat((((r._overrides?.protein??r.protein)||0)*factor).toFixed(1)):0,
+    carbs: hasMacros(r)?parseFloat((((r._overrides?.carbs??r.carbs)||0)*factor).toFixed(1)):0,
+    fat: hasMacros(r)?parseFloat((((r._overrides?.fat??r.fat)||0)*factor).toFixed(1)):0,
     isCustom:false
   };
   const list = getTRDay(dk,pid);
