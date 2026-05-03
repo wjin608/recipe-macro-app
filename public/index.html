@@ -296,11 +296,16 @@ async function callProxy(body){
 // ── USDA Nutrition lookup ───────────────────────────────────────────────────
 // ── Macro calculation: USDA first, AI fallback ─────────────────────────────
 async function calculateMacros(name, servings, ingLines, structuredIngs){
-  // Build clean ingredient list with full rawAmount (amount + unit combined)
+  console.log('calculateMacros called:', name, 'servings:', servings);
+  console.log('structuredIngs:', JSON.stringify(structuredIngs));
+
+  // Build clean ingredient list
   const ingsForUSDA = (structuredIngs || []).map(ing => ({
     item: ing.item,
-    rawAmount: ing.amount || ing.rawAmount || ''  // amount already has unit appended
+    rawAmount: ing.amount || ing.rawAmount || ''
   })).filter(i => i.item && i.item.trim());
+
+  console.log('ingsForUSDA:', JSON.stringify(ingsForUSDA));
 
   if(ingsForUSDA.length > 0){
     try{
@@ -314,10 +319,10 @@ async function calculateMacros(name, servings, ingLines, structuredIngs){
       if(result.error) throw new Error(result.error);
 
       console.log('USDA result:', result.usdaFound + '/' + result.total + ' found');
+      console.log('USDA perServing:', JSON.stringify(result.perServing));
+      console.log('USDA ingredients sample:', JSON.stringify(result.ingredients && result.ingredients[0]));
 
-      // Use USDA if it found at least half the ingredients
       if(result.usdaFound >= Math.ceil(ingsForUSDA.length * 0.5)){
-        // For ingredients USDA couldn't find, use AI to fill in the gaps
         const missing = result.ingredients.filter(r => r.source !== 'usda');
         let extraCal=0, extraPro=0, extraCarb=0, extraFat=0;
 
@@ -338,7 +343,7 @@ async function calculateMacros(name, servings, ingLines, structuredIngs){
           } catch(e){ console.warn('AI fallback for missing ings failed:', e.message); }
         }
 
-        return {
+        const finalMacros = {
           cal: Math.round(result.perServing.cal + extraCal/servings),
           protein: parseFloat((result.perServing.protein + extraPro/servings).toFixed(1)),
           carbs: parseFloat((result.perServing.carbs + extraCarb/servings).toFixed(1)),
@@ -350,13 +355,15 @@ async function calculateMacros(name, servings, ingLines, structuredIngs){
           })),
           source: 'usda'
         };
+        console.log('Returning finalMacros:', JSON.stringify(finalMacros));
+        return finalMacros;
       }
-      console.warn('USDA found too few ingredients (' + result.usdaFound + '/' + result.total + '), falling back to AI');
+      console.warn('USDA found too few, falling back to AI');
     } catch(e){
       console.warn('USDA lookup error, falling back to AI:', e.message);
     }
   }
-  // AI fallback
+  console.log('Using AI fallback');
   return calculateMacrosAI(name, servings, ingLines);
 }
 
