@@ -70,8 +70,12 @@ const DRY_CUP_WEIGHTS = {
   // Cocoa & chocolate
   'cocoa powder':85, 'cocoa':85,
   // Grains & dry goods
-  'oats':90, 'rolled oats':90, 'breadcrumbs':108,
-  'rice':185, 'quinoa':170,
+  'oats':90, 'rolled oats':90, 'oatmeal':90, 'instant oats':90,
+  'quick oats':90, 'steel cut oats':170,
+  'breadcrumbs':108, 'bread crumbs':108,
+  'rice':185, 'basmati rice':185, 'jasmine rice':185,
+  'brown rice':195, 'quinoa':170, 'couscous':173,
+  'cornmeal':138, 'polenta':138,
   // Produce (dried/dense)
   'sundried tomato':55, 'sun-dried tomato':55, 'sundried tomatoes':55,
   'sun-dried tomatoes':55, 'raisin':145, 'raisins':145,
@@ -179,6 +183,10 @@ const ALIASES = {
   'brown rice':'rice brown long-grain',
   'pasta':'pasta dry enriched',
   'rolled oats':'oats rolled',
+  'oatmeal':'cereals oatmeal cooked',
+  'instant oatmeal':'cereals oatmeal cooked',
+  'quick oats':'oats rolled',
+  'steel cut oats':'oats steel cut',
   'quinoa':'quinoa',
   // Other
   'peanut butter':'peanut butter smooth',
@@ -265,8 +273,26 @@ function toGrams(qty, unit, itemName) {
     const volUnits = new Set(['cup','cups','tbsp','tablespoon','tablespoons','tsp','teaspoon','teaspoons','ml','l','liter','liters']);
     if (volUnits.has(u)) {
       // For cup/tbsp/tsp, check dry ingredient weights first
-      const isDryMatch = (name, dry) => name.includes(dry) || dry.includes(name.split(' ').slice(0,2).join(' '));
-      const dryEntry = Object.entries(DRY_CUP_WEIGHTS).find(([dry]) => isDryMatch(name, dry));
+      // Map common ingredient name variants to their DRY_CUP_WEIGHTS key
+      const DRY_SYNONYMS = {
+        'oatmeal':'oats', 'instant oatmeal':'oats', 'quick oats':'oats',
+        'rolled oat':'oats', 'porridge oats':'oats',
+        'all purpose flour':'flour', 'all-purpose flour':'flour',
+        'plain flour':'flour', 'bread flour':'flour',
+        'self raising flour':'flour', 'whole wheat flour':'flour',
+        'ap flour':'flour', 'ap flour':'flour',
+        'powdered sugar':'powdered sugar', 'icing sugar':'powdered sugar',
+        'confectioners sugar':'powdered sugar',
+        'granulated sugar':'granulated sugar', 'caster sugar':'granulated sugar',
+        'white sugar':'granulated sugar', 'cane sugar':'granulated sugar',
+        'dutch process cocoa':'cocoa powder', 'cocoa':'cocoa powder',
+        'unsweetened cocoa':'cocoa powder',
+      };
+      const resolvedName = DRY_SYNONYMS[name] || name;
+      const isDryMatch = (rName, dry) =>
+        rName.includes(dry) || dry.includes(rName) ||
+        dry.split(' ').some(w => w.length > 3 && rName.includes(w));
+      const dryEntry = Object.entries(DRY_CUP_WEIGHTS).find(([dry]) => isDryMatch(resolvedName, dry));
       if (dryEntry) {
         const [, gramsPerCup] = dryEntry;
         if (u === 'cup' || u === 'cups') {
