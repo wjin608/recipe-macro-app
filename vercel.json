@@ -4,7 +4,7 @@
     { "source": "/api/nutrition", "destination": "/api/nutrition" },
     { "source": "/api/debug",     "destination": "/api/debug"     },
     { "source": "/api/test",      "destination": "/api/test"      },
-    { "source": "/test",           "destination": "/public/test.html" },
-    { "source": "/(.*)",          "destination": "/public/index.html" }
+    { "source": "/test",          "destination": "/public/test.html" },
+    { "source": "/((?!api/).*)",  "destination": "/public/index.html" }
   ]
 }
