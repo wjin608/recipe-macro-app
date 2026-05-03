@@ -519,16 +519,42 @@ async function saveEdit(){
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function buildEntry(r,macros,source,extra={}){
-  return{...r,ingredients:macros?mergeWithMacros(r.ingredients,macros):r.ingredients,
-    cal:macros?macros.cal:null,protein:macros?macros.protein:null,
-    carbs:macros?macros.carbs:null,fat:macros?macros.fat:null,
-    category:'',servingUnit:'person',servingLabel:`${r.servings} person${r.servings!==1?'s':''}`,
-    source,id:Date.now(),...extra};
+  const mergedIngs = macros ? mergeWithMacros(r.ingredients, macros) : r.ingredients;
+  return{
+    ...r,
+    ingredients: mergedIngs,
+    cal: macros ? macros.cal : null,
+    protein: macros ? macros.protein : null,
+    carbs: macros ? macros.carbs : null,
+    fat: macros ? macros.fat : null,
+    category:'',
+    servingUnit:'person',
+    servingLabel:`${r.servings} person${r.servings!==1?'s':''}`,
+    source, id:Date.now(),
+    ...extra
+  };
 }
 function mergeWithMacros(ings,macros){
-  return ings.map((ing,idx)=>{const m=macros&&macros.ingredients&&macros.ingredients[idx];
-    return{...ing,cal:m?Math.round(m.cal):null,protein:m?parseFloat((m.protein||0).toFixed(1)):null,
-      carbs:m?parseFloat((m.carbs||0).toFixed(1)):null,fat:m?parseFloat((m.fat||0).toFixed(1)):null};});
+  // If macros came from USDA, ingredients are already fully populated — use them directly
+  if(macros && macros.source === 'usda' && macros.ingredients && macros.ingredients.length > 0){
+    return macros.ingredients.map(m => ({
+      ...m,
+      cal: m.cal != null ? Math.round(m.cal) : null,
+      protein: m.protein != null ? parseFloat((m.protein||0).toFixed(1)) : null,
+      carbs: m.carbs != null ? parseFloat((m.carbs||0).toFixed(1)) : null,
+      fat: m.fat != null ? parseFloat((m.fat||0).toFixed(1)) : null,
+    }));
+  }
+  // AI result — match by index
+  return ings.map((ing,idx)=>{
+    const m=macros&&macros.ingredients&&macros.ingredients[idx];
+    return{...ing,
+      cal:m?Math.round(m.cal):null,
+      protein:m?parseFloat((m.protein||0).toFixed(1)):null,
+      carbs:m?parseFloat((m.carbs||0).toFixed(1)):null,
+      fat:m?parseFloat((m.fat||0).toFixed(1)):null
+    };
+  });
 }
 function hasMacros(r){return r.cal!=null;}
 function parseSteps(raw){return(raw||'').split('\n').filter(l=>l.trim()).map(l=>l.replace(/^\d+[\.\)]\s*/,''));}
