@@ -144,7 +144,7 @@ const ALIASES = {
   'granulated sugar':'sugars white granulated',
   'caster sugar':'sugars white granulated',
   'cane sugar':'sugars white granulated',
-  'brown sugar':'sugars brown packed',
+  'brown sugar':'sugars brown',
   'powdered sugar':'sugars powdered confectioners',
   'icing sugar':'sugars powdered confectioners',
   'honey':'honey',
@@ -170,7 +170,7 @@ const ALIASES = {
   // Oils & fats
   'olive oil':'oil olive salad or cooking',
   'vegetable oil':'oil vegetable salad or cooking',
-  'coconut oil':'oil coconut pure',
+  'coconut oil':'oil coconut',
   'sesame oil':'oil sesame salad or cooking',
   'canola oil':'oil canola',
   'sunflower oil':'oil sunflower',
@@ -187,7 +187,7 @@ const ALIASES = {
   // Broths
   'chicken stock':'soup chicken broth',
   'chicken broth':'chicken broth or bouillon dry ready-to-use',
-  'chicken breast':'chicken broilers fryers breast meat only raw',
+  'chicken breast':'chicken breast meat only raw',
   'chicken thigh':'chicken broilers fryers thigh meat only raw',
   'turkey':'turkey breast meat only raw',
   'salmon':'fish salmon atlantic raw',
@@ -213,7 +213,7 @@ const ALIASES = {
   // Other
   'peanut butter':'peanut butter smooth style without salt',
   'almond butter':'nut butter almond',
-  'coconut milk':'coconut milk unsweetened canned',
+  'coconut milk':'coconut milk canned',
   'water':'water tap drinking',
   'warm water':'water tap drinking',
   'cold water':'water tap drinking',
@@ -224,7 +224,7 @@ const ALIASES = {
   'cold water':'water tap drinking',
   'lukewarm water':'water tap drinking',
   'banana':'bananas raw',
-  'apple':'apples raw',
+  'apple':'apples raw yellow',
   'tomato':'tomatoes red ripe raw',
   'onion':'onions raw',
   'garlic clove':'garlic raw',
@@ -321,8 +321,7 @@ function toGrams(qty, unit, itemName) {
       };
       const resolvedName = DRY_SYNONYMS[name] || name;
       const isDryMatch = (rName, dry) =>
-        rName.includes(dry) || (dry === rName) ||
-        (rName.split(' ').length === 1 && (dry === rName || dry.startsWith(rName + ' ') || dry.endsWith(' ' + rName)));
+        rName.includes(dry) || (dry === rName);
       const dryEntry = Object.entries(DRY_CUP_WEIGHTS).find(([dry]) => isDryMatch(resolvedName, dry));
       if (dryEntry) {
         const [, gramsPerCup] = dryEntry;

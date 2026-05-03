@@ -170,6 +170,14 @@ h1,h2,h3{font-family:'Lora',serif;}
 .detail-source a{color:var(--accent3);word-break:break-all;}
 .cat-group-title{font-family:'Lora',serif;font-size:18px;letter-spacing:-0.01em;color:var(--text);margin:28px 0 12px;padding-bottom:6px;border-bottom:1px solid var(--border);}
 .cat-group-title:first-child{margin-top:0;}
+.macro-warning{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#92620a;background:#fef3e2;border:1px solid #f0d090;border-radius:6px;padding:4px 10px;margin-top:8px;margin-bottom:4px;}
+.macro-warning svg{flex-shrink:0;}
+.override-row{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-top:6px;padding:10px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--border);}
+.override-field label{display:block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:3px;}
+.override-field input{width:100%;padding:5px 7px;border:1px solid var(--border2);border-radius:6px;font-size:13px;font-family:'DM Sans',sans-serif;text-align:right;}
+.override-field input:focus{outline:none;border-color:var(--accent3);}
+.override-toggle{font-size:12px;color:var(--text2);cursor:pointer;background:none;border:none;padding:0;font-family:'DM Sans',sans-serif;text-decoration:underline;margin-top:4px;display:block;}
+.override-badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:99px;background:#e8f0fb;color:#1a4a8a;margin-left:4px;vertical-align:middle;}
 
 @media(max-width:768px){
   #layout{grid-template-columns:1fr;}
@@ -417,8 +425,10 @@ async function importFromUrl(){
     setStatus(statusEl,'loading','Calculating macros...');
     const ingLines=r.ingredients.map(i=>`${i.amount} ${i.item}`).join('\n');
     let macros=null;try{macros=await calculateMacros(r.name,r.servings,ingLines,r.ingredients);}catch(e){}
+    const newIdx=recipes.length;
     recipes.push(buildEntry(r,macros,'url',{sourceUrl:url}));persist();
     statusEl.innerHTML='';document.getElementById('url-input').value='';showPage('library');
+    if(macros) crossCheckMacros(newIdx);
   }catch(e){setStatus(statusEl,'err',e.message);}
   btn.disabled=false;btn.textContent='Import';
 }
@@ -494,7 +504,9 @@ async function saveManual(calcMacros){
     sourceUrl:document.getElementById('m-source-url').value.trim()||'',
     photo:document.getElementById('m-photo-input')._photoData||'',
     source:'manual'});
+  const midx=recipes.length-1;
   persist();btn.disabled=false;btn.textContent='Save & calculate macros';showPage('library');
+  if(macros) crossCheckMacros(midx);
 }
 
 async function recalcMacros(i){
@@ -506,6 +518,7 @@ async function recalcMacros(i){
     recipes[i]={...r,cal:macros.cal,protein:macros.protein,carbs:macros.carbs,fat:macros.fat,
       ingredients:mergeWithMacros(r.ingredients,macros)};
     persist();renderDetail(i);
+    crossCheckMacros(i);
   }catch(e){
     if(btn){btn.disabled=false;btn.textContent='Try again';}
     alert('Calculation failed: '+e.message);
@@ -544,6 +557,7 @@ async function saveEdit(){
     _curSrv:srvInfo.servings};
   persist();btn.disabled=false;btn.textContent='Save & recalculate macros';statusEl.innerHTML='';
   detailIdx=i;showPage('detail');
+  if(macros) crossCheckMacros(i);
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -626,6 +640,57 @@ function showPage(page){
   if(page==='library'){editingIdx=null;renderLibrary();}
   if(page==='detail')renderDetail(detailIdx);
   if(page==='add'&&editingIdx===null)initAddForm();
+}
+
+// ── Macro cross-check: compare USDA vs AI, warn if >10% off ──────────────
+async function crossCheckMacros(recipeIdx) {
+  const r = recipes[recipeIdx];
+  if (!r || !r.cal) return;
+  try {
+    const ingLines = r.ingredients.map(i => `${i.rawAmount||i.amount||''} ${i.item}`).join('\n');
+    const aiMacros = await calculateMacrosAI(r.name, r.servings, ingLines);
+    if (!aiMacros || !aiMacros.cal) return;
+    const pct = (got, exp) => exp > 0 ? Math.abs(got - exp) / exp : 0;
+    const offFields = [];
+    if (pct(r.cal, aiMacros.cal) > 0.10) offFields.push(`calories (USDA: ${r.cal}, AI: ${Math.round(aiMacros.cal)})`);
+    if (pct(r.protein, aiMacros.protein) > 0.10) offFields.push(`protein (USDA: ${r.protein}g, AI: ${parseFloat((aiMacros.protein||0).toFixed(1))}g)`);
+    if (pct(r.carbs, aiMacros.carbs) > 0.10) offFields.push(`carbs (USDA: ${r.carbs}g, AI: ${parseFloat((aiMacros.carbs||0).toFixed(1))}g)`);
+    if (pct(r.fat, aiMacros.fat) > 0.10) offFields.push(`fat (USDA: ${r.fat}g, AI: ${parseFloat((aiMacros.fat||0).toFixed(1))}g)`);
+    if (offFields.length > 0) {
+      recipes[recipeIdx]._macroWarning = `AI estimate differs on: ${offFields.join(', ')}`;
+    } else {
+      recipes[recipeIdx]._macroWarning = null;
+    }
+    persist();
+  } catch(e) { /* cross-check failed silently */ }
+}
+
+// ── Manual macro override ──────────────────────────────────────────────────
+function getOverrides(recipeIdx) {
+  return recipes[recipeIdx]._overrides || {};
+}
+
+function saveOverride(recipeIdx, field, value) {
+  if (!recipes[recipeIdx]._overrides) recipes[recipeIdx]._overrides = {};
+  const v = parseFloat(value);
+  if (!isNaN(v) && v >= 0) {
+    recipes[recipeIdx]._overrides[field] = v;
+  } else {
+    delete recipes[recipeIdx]._overrides[field];
+  }
+  persist();
+  renderDetail(recipeIdx);
+}
+
+function clearOverrides(recipeIdx) {
+  delete recipes[recipeIdx]._overrides;
+  persist();
+  renderDetail(recipeIdx);
+}
+
+function getDisplayMacro(r, field) {
+  const ov = r._overrides && r._overrides[field] != null ? r._overrides[field] : r[field];
+  return ov != null ? ov : null;
 }
 
 // ── Photo helpers ────────────────────────────────────────────────────────
@@ -730,8 +795,26 @@ function renderDetail(i){
   const [bg,color]=r.category?catColor(r.category):['transparent','inherit'];
   const catBadge=r.category?`<span style="background:${bg};color:${color};font-size:11px;padding:2px 7px;border-radius:99px;margin-left:5px;">${r.category}</span>`:'';
   const srcNote=r.source==='url'&&r.sourceUrl?`<div style="font-size:12px;color:#6b6560;margin-bottom:14px;">Imported from <a href="${r.sourceUrl}" target="_blank" style="color:#2c5f8a;">${new URL(r.sourceUrl).hostname}</a></div>`:'';
+  const dCal=getDisplayMacro(r,'cal'), dPro=getDisplayMacro(r,'protein'), dCarb=getDisplayMacro(r,'carbs'), dFat=getDisplayMacro(r,'fat');
+  const hasOv=r._overrides&&Object.keys(r._overrides).length>0;
+  const warnHtml=r._macroWarning?`<div class="macro-warning"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Please double check the macros — AI estimate differs significantly. <small style="opacity:0.7">(${r._macroWarning})</small></div>`:'';
+  const overrideHtml=`<div style="margin-top:6px;">
+    <button class="override-toggle" onclick="document.getElementById('override-panel-${i}').style.display=document.getElementById('override-panel-${i}').style.display==='none'?'block':'none'">
+      ${hasOv?'✏ Macros overridden <span class=\"override-badge\">custom</span>':'✏ Override macros manually'}
+    </button>
+    <div id="override-panel-${i}" style="display:${hasOv?'block':'none'}">
+      <div class="override-row">
+        <div class="override-field"><label>Calories</label><input type="number" min="0" placeholder="${dCal!=null?Math.round(dCal*factor):''}" value="${r._overrides&&r._overrides.cal!=null?r._overrides.cal:''}" onchange="saveOverride(${i},'cal',this.value)"/></div>
+        <div class="override-field"><label>Protein (g)</label><input type="number" min="0" step="0.1" placeholder="${dPro!=null?parseFloat((dPro*factor).toFixed(1)):''}" value="${r._overrides&&r._overrides.protein!=null?r._overrides.protein:''}" onchange="saveOverride(${i},'protein',this.value)"/></div>
+        <div class="override-field"><label>Carbs (g)</label><input type="number" min="0" step="0.1" placeholder="${dCarb!=null?parseFloat((dCarb*factor).toFixed(1)):''}" value="${r._overrides&&r._overrides.carbs!=null?r._overrides.carbs:''}" onchange="saveOverride(${i},'carbs',this.value)"/></div>
+        <div class="override-field"><label>Fat (g)</label><input type="number" min="0" step="0.1" placeholder="${dFat!=null?parseFloat((dFat*factor).toFixed(1)):''}" value="${r._overrides&&r._overrides.fat!=null?r._overrides.fat:''}" onchange="saveOverride(${i},'fat',this.value)"/></div>
+      </div>
+      ${hasOv?`<button class="override-toggle" style="color:var(--danger);margin-top:4px;" onclick="clearOverrides(${i})">✕ Clear overrides</button>`:''}
+      <p style="font-size:11px;color:var(--text3);margin-top:4px;">Per serving values. Leave blank to use calculated value.</p>
+    </div>
+  </div>`;
   const macroSection=hasMacros(r)
-    ?`<div class="macro-strip"><div class="macro-tile"><span class="macro-tile-val cal" id="d-cal">${Math.round(r.cal*factor)}</span><div class="macro-tile-unit">kcal</div><div class="macro-tile-label">Calories</div></div><div class="macro-tile"><span class="macro-tile-val pro" id="d-pro">${Math.round(r.protein*factor)}</span><div class="macro-tile-unit">g</div><div class="macro-tile-label">Protein</div></div><div class="macro-tile"><span class="macro-tile-val" id="d-carb">${Math.round(r.carbs*factor)}</span><div class="macro-tile-unit">g</div><div class="macro-tile-label">Carbs</div></div><div class="macro-tile"><span class="macro-tile-val" id="d-fat">${Math.round(r.fat*factor)}</span><div class="macro-tile-unit">g</div><div class="macro-tile-label">Fat</div></div></div>`
+    ?`<div class="macro-strip"><div class="macro-tile"><span class="macro-tile-val cal" id="d-cal">${dCal!=null?Math.round(dCal*factor):'—'}</span><div class="macro-tile-unit">kcal</div><div class="macro-tile-label">Calories${hasOv&&r._overrides&&r._overrides.cal!=null?' <span class=\"override-badge\">custom</span>':''}</div></div><div class="macro-tile"><span class="macro-tile-val pro" id="d-pro">${dPro!=null?Math.round(dPro*factor):'—'}</span><div class="macro-tile-unit">g</div><div class="macro-tile-label">Protein${hasOv&&r._overrides&&r._overrides.protein!=null?' <span class=\"override-badge\">custom</span>':''}</div></div><div class="macro-tile"><span class="macro-tile-val" id="d-carb">${dCarb!=null?Math.round(dCarb*factor):'—'}</span><div class="macro-tile-unit">g</div><div class="macro-tile-label">Carbs${hasOv&&r._overrides&&r._overrides.carbs!=null?' <span class=\"override-badge\">custom</span>':''}</div></div><div class="macro-tile"><span class="macro-tile-val" id="d-fat">${dFat!=null?Math.round(dFat*factor):'—'}</span><div class="macro-tile-unit">g</div><div class="macro-tile-label">Fat${hasOv&&r._overrides&&r._overrides.fat!=null?' <span class=\"override-badge\">custom</span>':''}</div></div></div>${warnHtml}${overrideHtml}`
     :`<div class="recalc-box"><p>Macros not yet calculated for this recipe.</p><button class="btn btn-primary" id="recalc-btn" onclick="recalcMacros(${i})">Calculate macros now</button></div>`;
   const ings=r.ingredients.map(ing=>{
     const scaledAmt=ing.rawAmount?scaleAmount(ing.rawAmount,factor):'';const hasMac=ing.cal!=null;
