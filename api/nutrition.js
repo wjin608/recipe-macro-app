@@ -175,6 +175,15 @@ const ALIASES = {
   // Other
   'peanut butter':'peanut butter smooth',
   'coconut milk':'coconut milk canned',
+  'water':'water tap drinking',
+  'warm water':'water tap drinking',
+  'cold water':'water tap drinking',
+  'hot water':'water tap drinking',
+  'lukewarm water':'water tap drinking',
+  'water':'water tap drinking',
+  'warm water':'water tap drinking',
+  'cold water':'water tap drinking',
+  'lukewarm water':'water tap drinking',
   'lemon juice':'lemon juice raw',
   'lime juice':'lime juice raw',
   'orange juice':'orange juice raw',
@@ -199,6 +208,12 @@ const STRIP = new Set([
   'minced','sliced','grated','shredded','peeled','boneless','skinless',
   'unsalted','salted','large','medium','small','extra','organic',
   'softened','melted','beaten','room','temperature','optional',
+]);
+
+// Ingredients with known zero macros — skip USDA lookup entirely
+const ZERO_MACRO_ITEMS = new Set([
+  'water', 'salt', 'kosher salt', 'sea salt', 'table salt',
+  'black pepper', 'white pepper', 'pepper',
 ]);
 
 // ── Amount parsing ────────────────────────────────────────────────────────
@@ -410,6 +425,13 @@ export default async function handler(req, res) {
       let grams = parsed.grams;
       if (!grams && parsed.qty) grams = estimateGrams(item, parsed.qty, parsed.unit);
       if (!grams || grams <= 0) grams = 100;
+
+      // Short-circuit for known zero-macro items
+      const itemLower = item.toLowerCase();
+      if (ZERO_MACRO_ITEMS.has(itemLower) || [...ZERO_MACRO_ITEMS].some(z => itemLower.includes(z))) {
+        results.push({ item, rawAmount, grams: Math.round(grams), cal:0, protein:0, carbs:0, fat:0, source:'usda', matchedFood: item + ' (zero macros)' });
+        continue;
+      }
 
       const match = await findFood(item);
       if (!match) {

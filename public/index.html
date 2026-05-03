@@ -597,6 +597,8 @@ function showPage(page){
   currentPage=page;
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById(`page-${page}`).classList.add('active');
+  // Always refresh sidebar so category filters work from any page
+  renderSidebarFilters();
   if(page==='library'){editingIdx=null;renderLibrary();}
   if(page==='detail')renderDetail(detailIdx);
   if(page==='add'&&editingIdx===null)initAddForm();
@@ -627,15 +629,21 @@ function renderLibrary(){
 function renderSidebarFilters(){
   const counts={};recipes.forEach(r=>{const c=r.category||'';counts[c]=(counts[c]||0)+1;});
   const allCats=['All',...categories.filter(c=>counts[c]>0)];
-  document.getElementById('sidebar-filters').innerHTML=allCats.map(c=>{
+  const el=document.getElementById('sidebar-filters');
+  if(!el)return;
+  el.innerHTML='';
+  allCats.forEach(c=>{
     const cnt=c==='All'?recipes.length:(counts[c]||0);
-    return `<button class="filter-chip${filterCat===c?' active':''}" onclick="selectCategory('${c}')">${c}<span class="count">${cnt}</span></button>`;
-  }).join('');
+    const btn=document.createElement('button');
+    btn.className='filter-chip'+(filterCat===c?' active':'');
+    btn.innerHTML=c+'<span class="count">'+cnt+'</span>';
+    btn.addEventListener('click',()=>selectCategory(c));
+    el.appendChild(btn);
+  });
 }
 
 function selectCategory(cat){
   filterCat=cat;
-  // Always navigate to library page when clicking sidebar category
   showPage('library');
 }
 
