@@ -190,14 +190,32 @@ function pickBest(foods,itemName) {
 }
 
 async function fetchByFdcId(fdcId) {
-  const nids=[...NUTRIENT_IDS.cal,...NUTRIENT_IDS.protein,...NUTRIENT_IDS.carbs,...NUTRIENT_IDS.fat].join('&nutrients=');
-  const url=USDA_BASE+'/foods?fdcIds='+fdcId+'&nutrients='+nids+'&api_key='+USDA_API_KEY;
+  // Use detail endpoint — returns nested nutrient format
+  const url=USDA_BASE+'/food/'+fdcId+'?api_key='+USDA_API_KEY;
   const r=await fetch(url);
   if(!r.ok) return null;
-  const foods=await r.json();
-  if(!foods||!foods.length) return null;
-  const food=foods[0];
-  return {food:{description:food.description,fdcId:food.fdcId},nutrients:extractNutrients(food)};
+  const food=await r.json();
+  const ns=food.foodNutrients||[];
+  // Detail format: { nutrient: { id, name }, amount }
+  // Search format: { nutrientId, nutrientName, value }
+  // Handle both
+  const get=(...terms)=>{
+    for(const t of terms){
+      const hit=ns.find(n=>{
+        const name=((n.nutrient&&n.nutrient.name)||n.nutrientName||n.name||'').toLowerCase();
+        return name.includes(t);
+      });
+      if(hit){const v=hit.amount??hit.value??0;if(v>0)return v;}
+    }
+    return 0;
+  };
+  const nutrients={
+    cal:get('energy','calorie'),
+    protein:get('protein'),
+    carbs:get('carbohydrate'),
+    fat:get('total lipid','fat'),
+  };
+  return {food:{description:food.description,fdcId:food.fdcId},nutrients};
 }
 
 async function lookupIngredient(item,rawAmount) {

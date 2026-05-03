@@ -177,6 +177,7 @@ h1,h2,h3{font-family:'Lora',serif;}
 .override-field input{width:100%;padding:5px 7px;border:1px solid var(--border2);border-radius:6px;font-size:13px;font-family:'DM Sans',sans-serif;text-align:right;}
 .override-field input:focus{outline:none;border-color:var(--accent3);}
 .override-toggle{font-size:12px;color:var(--text2);cursor:pointer;background:none;border:none;padding:0;font-family:'DM Sans',sans-serif;text-decoration:underline;margin-top:4px;display:block;}
+.override-save-row{display:flex;gap:8px;margin-top:8px;align-items:center;}
 .override-badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:99px;background:#e8f0fb;color:#1a4a8a;margin-left:4px;vertical-align:middle;}
 
 @media(max-width:768px){
@@ -701,7 +702,26 @@ function saveIngOverride(recipeIdx, ingIdx, field, value) {
   } else {
     delete r.ingredients[ingIdx]._overrides[field];
   }
-  // Recalculate recipe totals from ingredient overrides
+  recalcFromIngredients(recipeIdx);
+  persist();
+  renderDetail(recipeIdx);
+}
+
+function saveIngOverridePanel(recipeIdx, ingIdx) {
+  const r = recipes[recipeIdx];
+  if (!r.ingredients[ingIdx]._overrides) r.ingredients[ingIdx]._overrides = {};
+  const fields = ['cal','pro','carb','fat'];
+  const keys = ['cal','protein','carbs','fat'];
+  fields.forEach((f, idx) => {
+    const el = document.getElementById('ov-'+f+'-'+recipeIdx+'-'+ingIdx);
+    if (!el) return;
+    const v = parseFloat(el.value);
+    if (!isNaN(v) && v >= 0) {
+      r.ingredients[ingIdx]._overrides[keys[idx]] = v;
+    } else if (el.value === '') {
+      delete r.ingredients[ingIdx]._overrides[keys[idx]];
+    }
+  });
   recalcFromIngredients(recipeIdx);
   persist();
   renderDetail(recipeIdx);
@@ -883,12 +903,17 @@ function renderDetail(i){
     const macLine=hasMac?`<div class="ing-detail-mac">${dCal!=null?Math.round(dCal*factor):0} kcal · P${dPro!=null?parseFloat((dPro*factor).toFixed(1)):0}g · C${dCarb!=null?parseFloat((dCarb*factor).toFixed(1)):0}g · F${dFat!=null?parseFloat((dFat*factor).toFixed(1)):0}g ${ovBadge}</div>`:'';
     const ovPanel=`<div id="ing-ov-${i}-${ingIdx}" style="display:none;margin-top:6px;">
       <div class="override-row">
-        <div class="override-field"><label>Cal</label><input type="number" min="0" placeholder="${dCal!=null?Math.round(dCal):''}" value="${ing._overrides&&ing._overrides.cal!=null?ing._overrides.cal:''}" onchange="saveIngOverride(${i},${ingIdx},'cal',this.value)"/></div>
-        <div class="override-field"><label>Protein g</label><input type="number" min="0" step="0.1" placeholder="${dPro!=null?parseFloat(dPro.toFixed(1)):''}" value="${ing._overrides&&ing._overrides.protein!=null?ing._overrides.protein:''}" onchange="saveIngOverride(${i},${ingIdx},'protein',this.value)"/></div>
-        <div class="override-field"><label>Carbs g</label><input type="number" min="0" step="0.1" placeholder="${dCarb!=null?parseFloat(dCarb.toFixed(1)):''}" value="${ing._overrides&&ing._overrides.carbs!=null?ing._overrides.carbs:''}" onchange="saveIngOverride(${i},${ingIdx},'carbs',this.value)"/></div>
-        <div class="override-field"><label>Fat g</label><input type="number" min="0" step="0.1" placeholder="${dFat!=null?parseFloat(dFat.toFixed(1)):''}" value="${ing._overrides&&ing._overrides.fat!=null?ing._overrides.fat:''}" onchange="saveIngOverride(${i},${ingIdx},'fat',this.value)"/></div>
+        <div class="override-field"><label>Cal</label><input type="number" min="0" id="ov-cal-${i}-${ingIdx}" placeholder="${dCal!=null?Math.round(dCal):''}" value="${ing._overrides&&ing._overrides.cal!=null?ing._overrides.cal:''}"/></div>
+        <div class="override-field"><label>Protein g</label><input type="number" min="0" step="0.1" id="ov-pro-${i}-${ingIdx}" placeholder="${dPro!=null?parseFloat(dPro.toFixed(1)):''}" value="${ing._overrides&&ing._overrides.protein!=null?ing._overrides.protein:''}"/></div>
+        <div class="override-field"><label>Carbs g</label><input type="number" min="0" step="0.1" id="ov-carb-${i}-${ingIdx}" placeholder="${dCarb!=null?parseFloat(dCarb.toFixed(1)):''}" value="${ing._overrides&&ing._overrides.carbs!=null?ing._overrides.carbs:''}"/></div>
+        <div class="override-field"><label>Fat g</label><input type="number" min="0" step="0.1" id="ov-fat-${i}-${ingIdx}" placeholder="${dFat!=null?parseFloat(dFat.toFixed(1)):''}" value="${ing._overrides&&ing._overrides.fat!=null?ing._overrides.fat:''}"/></div>
       </div>
-      ${hasIngOv?`<button class="override-toggle" style="color:var(--danger);margin-top:3px;" onclick="clearIngOverride(${i},${ingIdx})">✕ Clear</button>`:''}
+      <div class="override-save-row">
+        <button class="btn btn-primary" style="padding:5px 14px;font-size:12px;" onclick="saveIngOverridePanel(${i},${ingIdx})">Save</button>
+        <button class="btn btn-secondary" style="padding:5px 14px;font-size:12px;" onclick="document.getElementById('ing-ov-${i}-${ingIdx}').style.display='none'">Cancel</button>
+        ${hasIngOv?`<button class="override-toggle" style="color:var(--danger);margin:0;" onclick="clearIngOverride(${i},${ingIdx})">✕ Clear override</button>`:''}
+      </div>
+      <p style="font-size:11px;color:var(--text3);margin-top:4px;">Values are per total ingredient amount. Recipe totals update automatically.</p>
     </div>`;
     return `<div class="ing-detail-row" style="flex-direction:column;align-items:stretch;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
