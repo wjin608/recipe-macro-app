@@ -85,6 +85,14 @@ const DRY_CUP_WEIGHTS = {
 };
 
 // Ingredient name → specific USDA search term
+// Ingredients that correctly have zero (or near-zero) macros
+// USDA should return 0 for these — don't let scoring override them
+const ZERO_MACRO_INGREDIENTS = new Set([
+  'water','salt','kosher salt','sea salt','table salt','baking soda',
+  'bicarbonate of soda','bicarbonate','gelatin','unflavored gelatin',
+  'black pepper','white pepper','pepper','spices','herbs',
+]);
+
 const ALIASES = {
   // Baked goods
   'ladyfinger':'cookies ladyfingers',
@@ -365,15 +373,27 @@ async function searchUSDA(query) {
 }
 
 // Pick best match: food with most complete macros
-function pickBest(foods) {
+function pickBest(foods, itemName) {
+  const name = (itemName||'').toLowerCase();
+  const isZeroMacro = [...ZERO_MACRO_INGREDIENTS].some(z => name.includes(z));
+
   let best = null, bestScore = -1;
   for (const food of foods) {
     const n = extractFromSearchResult(food);
-    const score = (n.cal > 0 ? 2 : 0) + (n.protein >= 0 ? 1 : 0) + (n.carbs > 0 ? 2 : 0) + (n.fat >= 0 ? 1 : 0);
-    console.log(`  candidate: "${food.description}" cal:${n.cal} carbs:${n.carbs} score:${score}`);
+    let score;
+    if (isZeroMacro) {
+      // For zero-macro ingredients, prefer foods where cal AND carbs are both 0
+      // Score highest if both are 0, penalize if carbs > 0 (wrong match)
+      score = (n.cal === 0 ? 3 : 0) + (n.carbs === 0 ? 3 : -5) + (n.fat === 0 ? 1 : 0);
+    } else {
+      // For normal ingredients, prefer foods with complete non-zero macro data
+      score = (n.cal > 0 ? 2 : 0) + (n.protein > 0 ? 1 : 0) + (n.carbs > 0 ? 2 : 0) + (n.fat > 0 ? 1 : 0);
+    }
+    console.log(`  candidate: "${food.description}" cal:${n.cal} carbs:${n.carbs} score:${score} (zero-macro:${isZeroMacro})`);
     if (score > bestScore) { bestScore = score; best = food; }
   }
-  return bestScore > 0 ? best : null;
+  // For zero-macro ingredients, accept any match (even score 0)
+  return (isZeroMacro && best) ? best : (bestScore > 0 ? best : null);
 }
 
 async function findFood(name) {
@@ -390,7 +410,7 @@ async function findFood(name) {
   for (const q of [...new Set(queries)]) {
     if (!q || q.length < 2) continue;
     const foods = await searchUSDA(q);
-    const best = pickBest(foods);
+    const best = pickBest(foods, name);  // pass original name for zero-macro check
     if (best) {
       console.log(`  → picked: "${best.description}" for query "${q}"`);
       return { food: best, nutrients: extractFromSearchResult(best) };
