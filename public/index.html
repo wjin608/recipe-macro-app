@@ -293,7 +293,73 @@ async function callProxy(body){
   return JSON.parse(match[0]);
 }
 
-async function calculateMacros(name,servings,ingLines){
+// ── USDA Nutrition lookup ───────────────────────────────────────────────────
+async function lookupNutritionUSDA(ingredients, servings){
+  const resp = await fetch('/api/nutrition', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ ingredients, servings })
+  });
+  const data = await resp.json();
+  if(data.error) throw new Error(data.error);
+  return data;
+}
+
+// ── Macro calculation: USDA first, AI fallback ─────────────────────────────
+async function calculateMacros(name, servings, ingLines, structuredIngs){
+  // Try USDA first
+  if(structuredIngs && structuredIngs.length > 0){
+    try{
+      const result = await lookupNutritionUSDA(structuredIngs, servings);
+      // If USDA found at least 50% of ingredients, use it
+      if(result.usdaFound >= Math.ceil(structuredIngs.length * 0.5)){
+        // Fill in AI estimates for any not found by USDA
+        const notFound = result.ingredients.filter(r => r.source !== 'usda');
+        if(notFound.length > 0){
+          try{
+            const aiResult = await calculateMacrosAI(name, servings, notFound.map(i=>`${i.rawAmount} ${i.item}`).join('\n'));
+            // Merge AI results for missing ingredients
+            let extraCal=0, extraPro=0, extraCarb=0, extraFat=0;
+            if(aiResult && aiResult.ingredients){
+              aiResult.ingredients.forEach(ai => {
+                const match = result.ingredients.find(r => r.item === ai.item && r.source !== 'usda');
+                if(match){
+                  match.cal = ai.cal || 0; match.protein = ai.protein || 0;
+                  match.carbs = ai.carbs || 0; match.fat = ai.fat || 0;
+                  match.source = 'ai_fallback';
+                  extraCal += match.cal; extraPro += match.protein;
+                  extraCarb += match.carbs; extraFat += match.fat;
+                }
+              });
+            }
+            result.perServing.cal = Math.round(result.perServing.cal + extraCal/servings);
+            result.perServing.protein = parseFloat((result.perServing.protein + extraPro/servings).toFixed(1));
+            result.perServing.carbs = parseFloat((result.perServing.carbs + extraCarb/servings).toFixed(1));
+            result.perServing.fat = parseFloat((result.perServing.fat + extraFat/servings).toFixed(1));
+          }catch(e){ /* AI fallback failed, use USDA only */ }
+        }
+        return {
+          cal: result.perServing.cal,
+          protein: result.perServing.protein,
+          carbs: result.perServing.carbs,
+          fat: result.perServing.fat,
+          ingredients: result.ingredients.map(r => ({
+            item: r.item,
+            cal: r.cal, protein: r.protein, carbs: r.carbs, fat: r.fat,
+            source: r.source, matchedFood: r.matchedFood
+          })),
+          source: 'usda'
+        };
+      }
+    }catch(e){
+      console.warn('USDA lookup failed, falling back to AI:', e.message);
+    }
+  }
+  // Fall back to AI
+  return calculateMacrosAI(name, servings, ingLines);
+}
+
+async function calculateMacrosAI(name, servings, ingLines){
   return callProxy({
     model:'claude-sonnet-4-5',max_tokens:1200,
     system:`You are a nutrition expert. Calculate macros PER SERVING. Return ONLY a valid JSON object (no markdown, no backticks):\n{"cal":450,"protein":32,"carbs":40,"fat":14,"ingredients":[{"item":"mascarpone","cal":400,"protein":6,"carbs":3,"fat":40}]}\nTop-level values are PER SERVING. ingredients array shows per-ingredient macros for the TOTAL recipe.`,
@@ -330,7 +396,7 @@ async function importFromUrl(){
     if(!r.name||!r.ingredients||r.ingredients.length===0)throw new Error('Incomplete recipe extracted. Try a different URL or manual entry.');
     setStatus(statusEl,'loading','Calculating macros...');
     const ingLines=r.ingredients.map(i=>`${i.amount} ${i.item}`).join('\n');
-    let macros=null;try{macros=await calculateMacros(r.name,r.servings,ingLines);}catch(e){}
+    let macros=null;try{macros=await calculateMacros(r.name,r.servings,ingLines,r.ingredients);}catch(e){}
     recipes.push(buildEntry(r,macros,'url',{sourceUrl:url}));persist();
     statusEl.innerHTML='';document.getElementById('url-input').value='';showPage('library');
   }catch(e){setStatus(statusEl,'err',e.message);}
@@ -369,7 +435,7 @@ async function handleUpload(evt){
     }
     setStatus(statusEl,'loading','Calculating macros...');
     const ingLines=r.ingredients.map(i=>`${i.amount} ${i.item}`).join('\n');
-    let macros=null;try{macros=await calculateMacros(r.name,r.servings,ingLines);}catch(e){}
+    let macros=null;try{macros=await calculateMacros(r.name,r.servings,ingLines,r.ingredients);}catch(e){}
     recipes.push(buildEntry(r,macros,'uploaded'));persist();
     statusEl.innerHTML='';showPage('library');
   }catch(e){setStatus(statusEl,'err',e.message);}
@@ -391,7 +457,7 @@ async function saveManual(calcMacros){
     setStatus(statusEl,'loading','Calculating macros from your ingredients...');
     try{
       const ingLines=ings.map(i=>`${i.amount} ${i.item}`).join('\n');
-      macros=await calculateMacros(name,srvInfo.servings,ingLines);
+      macros=await calculateMacros(name,srvInfo.servings,ingLines,ings);
       statusEl.innerHTML='';
     }catch(e){
       setStatus(statusEl,'warn',`Macro calculation failed: ${e.message}. Saving without macros — you can calculate later.`);
@@ -411,7 +477,7 @@ async function recalcMacros(i){
   if(btn){btn.disabled=true;btn.textContent='Calculating...';}
   try{
     const ingLines=r.ingredients.map(ing=>`${ing.rawAmount||ing.amount||''} ${ing.item}`).join('\n');
-    const macros=await calculateMacros(r.name,r.servings,ingLines);
+    const macros=await calculateMacros(r.name,r.servings,ingLines,r.ingredients);
     recipes[i]={...r,cal:macros.cal,protein:macros.protein,carbs:macros.carbs,fat:macros.fat,
       ingredients:mergeWithMacros(r.ingredients,macros)};
     persist();renderDetail(i);
@@ -440,7 +506,7 @@ async function saveEdit(){
   btn.disabled=true;btn.textContent='Saving...';
   setStatus(statusEl,'loading','Recalculating macros...');
   let macros=null;
-  try{const ingLines=ings.map(ing=>`${ing.amount} ${ing.item}`).join('\n');macros=await calculateMacros(name,srvInfo.servings,ingLines);}catch(e){}
+  try{const ingLines=ings.map(ing=>`${ing.amount} ${ing.item}`).join('\n');macros=await calculateMacros(name,srvInfo.servings,ingLines,ings);}catch(e){}
   const mergedIngs=macros?mergeWithMacros(ings,macros):ings;
   recipes[i]={...recipes[i],name,time:time||'—',category:newCat,...srvInfo,
     cal:macros?macros.cal:recipes[i].cal,protein:macros?macros.protein:recipes[i].protein,
