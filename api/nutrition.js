@@ -107,6 +107,21 @@ const ZERO_MACRO_INGREDIENTS = new Set([
   'black pepper','white pepper','pepper','spices','herbs',
 ]);
 
+
+// Direct USDA fdcIds for ingredients that consistently match wrong foods
+// Bypasses search entirely for these items
+const DIRECT_FDCIDS = {
+  'brown sugar':    169655,  // Sugars, brown
+  'egg yolk':       173423,  // Egg, yolk, raw, fresh
+  'egg yolks':      173423,
+  'egg white':      173424,  // Egg, white, raw, fresh
+  'egg whites':     173424,
+  'coconut oil':    172337,  // Oil, coconut
+  'apple':          171688,  // Apples, raw, with skin (Foundation)
+  'apples':         171688,
+  'chicken breast': 171477,  // Chicken, broilers or fryers, breast, meat only, raw
+  'coconut milk':   175217,  // Coconut milk, canned (coconut products)
+};
 const ALIASES = {
   // Baked goods
   'ladyfinger':'cookies ladyfingers',
@@ -452,10 +467,43 @@ function pickBest(foods, itemName) {
   return (isZeroMacro && best) ? best : (bestScore > 0 ? best : null);
 }
 
-async function findFood(name) {
-  const cleaned = cleanName(name);
-  console.log(`findFood: "${name}" → searching "${cleaned}"`);
+async function fetchByFdcId(fdcId) {
+  const url = USDA_BASE + '/food/' + fdcId + '?api_key=' + USDA_API_KEY;
+  const r = await fetch(url);
+  if (!r.ok) return null;
+  const food = await r.json();
+  const ns = food.foodNutrients || [];
+  const getName = n => (n.nutrient && n.nutrient.name) || n.nutrientName || n.name || '';
+  const getValue = n => n.amount ?? n.value ?? 0;
+  const get = (...terms) => {
+    for (const t of terms) {
+      const hit = ns.find(n => getName(n).toLowerCase().includes(t));
+      if (hit) { const v = getValue(hit); if (v > 0) return v; }
+    }
+    return 0;
+  };
+  let nutrients = { cal: get('energy','calorie'), protein: get('protein'), carbs: get('carbohydrate'), fat: get('total lipid','fat') };
+  if (!nutrients.cal) {
+    const getById = (ids) => { for (const id of ids) { const hit = ns.find(n => n.nutrientId === id || n.nutrientNumber === String(id)); if (hit && hit.value > 0) return hit.value; } return 0; };
+    nutrients = { cal: getById(NUTRIENT_IDS.cal), protein: getById(NUTRIENT_IDS.protein), carbs: getById(NUTRIENT_IDS.carbs), fat: getById(NUTRIENT_IDS.fat) };
+  }
+  return { food: { description: food.description, fdcId: food.fdcId }, nutrients };
+}
 
+async function findFood(name) {
+  const nameLower = name.toLowerCase().trim();
+
+  // Check direct fdcId map first
+  const directEntry = Object.entries(DIRECT_FDCIDS).find(([k]) => nameLower === k || nameLower.includes(k));
+  if (directEntry) {
+    const result = await fetchByFdcId(directEntry[1]);
+    if (result) {
+      console.log(`findFood: "${name}" → direct fdcId ${directEntry[1]}: "${result.food.description}"`);
+      return result;
+    }
+  }
+
+  const cleaned = cleanName(name);
   const queries = [
     cleaned,
     cleaned.split(' ').slice(0,3).join(' '),
@@ -466,15 +514,14 @@ async function findFood(name) {
   for (const q of [...new Set(queries)]) {
     if (!q || q.length < 2) continue;
     const foods = await searchUSDA(q);
-    const best = pickBest(foods, name);  // pass original name for zero-macro check
+    const best = pickBest(foods, name);
     if (best) {
-      console.log(`  → picked: "${best.description}" for query "${q}"`);
-      return { food: best, nutrients: extractFromSearchResult(best) };
+      console.log(`findFood: "${name}" → search "${q}": "${best.description}"`);
+      return { food: best, nutrients: extractNutrients(best) };
     }
   }
   return null;
 }
-
 // ── Handler ───────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');

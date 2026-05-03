@@ -51,7 +51,7 @@ const TEST_CASES = [
   { item:'onion',             rawAmount:'1 piece',  expectedGrams:110, expectedCal:44,  expectedCarbs:10,  expectedProtein:1,  expectedFat:0  },
   { item:'garlic clove',      rawAmount:'2 piece',  expectedGrams:10,  expectedCal:15,  expectedCarbs:3,   expectedProtein:1,  expectedFat:0  },
   // Proteins
-  { item:'chicken breast',    rawAmount:'1 piece',  expectedGrams:174, expectedCal:186, expectedCarbs:0,   expectedProtein:35, expectedFat:4  },
+  { item:'chicken breast',    rawAmount:'1 piece',  expectedGrams:174, expectedCal:165, expectedCarbs:0,   expectedProtein:31, expectedFat:4  },
   { item:'salmon',            rawAmount:'100 g',    expectedGrams:100, expectedCal:208, expectedCarbs:0,   expectedProtein:20, expectedFat:13 },
   { item:'ground beef',       rawAmount:'100 g',    expectedGrams:100, expectedCal:254, expectedCarbs:0,   expectedProtein:17, expectedFat:20 },
   // Baking
@@ -84,6 +84,21 @@ const LIQUID_DENSITY = { 'milk':1.03,'cream':1.01,'heavy cream':1.01,'whipping c
 const DRY_CUP_WEIGHTS = { 'flour':125,'all-purpose flour':125,'bread flour':127,'whole wheat flour':120,'self-raising flour':125,'almond flour':96,'cornstarch':128,'corn starch':128,'powdered sugar':120,'icing sugar':120,'brown sugar':220,'granulated sugar':200,'white sugar':200,'caster sugar':200,'sugar':200,'cocoa powder':85,'cocoa':85,'whole milk':244,'milk':244,'2% milk':244,'skim milk':245,'almond milk':240,'oat milk':240,'soy milk':243,'buttermilk':245,'oats':90,'rolled oats':90,'oatmeal':90,'instant oats':90,'quick oats':90,'breadcrumbs':108,'bread crumbs':108,'rice':185,'basmati rice':185,'jasmine rice':185,'brown rice':195,'quinoa':170,'couscous':173,'cornmeal':138,'polenta':138,'salt':288,'parmesan':100,'shredded cheese':113,'peanut butter':258,'almond butter':258,'tahini':240,'sundried tomato':55,'sun-dried tomato':55,'almond':143,'almonds':143,'walnut':117,'walnuts':117,'pecan':109,'pecans':109,'cashew':137,'peanut':146,'sesame seed':144,'chia seed':160,'chia seeds':160 };
 const DRY_SYNONYMS = { 'oatmeal':'oats','instant oatmeal':'oats','quick oats':'oats','rolled oat':'oats','porridge oats':'oats','all purpose flour':'flour','all-purpose flour':'flour','plain flour':'flour','bread flour':'flour','self raising flour':'flour','whole wheat flour':'flour','ap flour':'flour','powdered sugar':'powdered sugar','icing sugar':'powdered sugar','confectioners sugar':'powdered sugar','granulated sugar':'granulated sugar','caster sugar':'granulated sugar','white sugar':'granulated sugar','cane sugar':'granulated sugar','dutch process cocoa':'cocoa powder','cocoa':'cocoa powder','unsweetened cocoa':'cocoa powder','whole milk':'milk','2% milk':'milk','skim milk':'milk','low fat milk':'milk','nonfat milk':'milk' };
 const ZERO_MACRO = new Set(['water','salt','kosher salt','sea salt','table salt','baking soda','bicarbonate','gelatin','black pepper','white pepper','pepper']);
+
+// Direct USDA fdcIds for ingredients that consistently match wrong foods
+// Bypasses search entirely for these items
+const DIRECT_FDCIDS = {
+  'brown sugar':    169655,  // Sugars, brown
+  'egg yolk':       173423,  // Egg, yolk, raw, fresh
+  'egg yolks':      173423,
+  'egg white':      173424,  // Egg, white, raw, fresh
+  'egg whites':     173424,
+  'coconut oil':    172337,  // Oil, coconut
+  'apple':          171688,  // Apples, raw, with skin (Foundation)
+  'apples':         171688,
+  'chicken breast': 171477,  // Chicken, broilers or fryers, breast, meat only, raw
+  'coconut milk':   175217,  // Coconut milk, canned (coconut products)
+};
 const ALIASES = { 'ladyfinger':'cookies ladyfingers','ladyfingers':'cookies ladyfingers','savoiardi':'cookies ladyfingers','all purpose flour':'wheat flour all-purpose','all-purpose flour':'wheat flour all-purpose','plain flour':'wheat flour all-purpose','bread flour':'wheat flour bread','self raising flour':'wheat flour self-rising','mascarpone':'mascarpone','heavy cream':'cream heavy whipping','double cream':'cream heavy whipping','whole milk':'milk whole 3.25%','skim milk':'milk nonfat','2% milk':'milk reduced fat 2% milkfat','butter':'butter without salt','cream cheese':'cream cheese','sour cream':'sour cream cultured','greek yogurt':'yogurt greek plain','greek yoghurt':'yogurt greek plain','parmesan':'cheese parmesan grated','mozzarella':'cheese mozzarella whole milk','ricotta':'cheese ricotta whole milk','white sugar':'sugars white granulated','granulated sugar':'sugars white granulated','caster sugar':'sugars white granulated','cane sugar':'sugars white granulated','brown sugar':'sugars brown','powdered sugar':'sugars powdered confectioners','icing sugar':'sugars powdered confectioners','honey':'honey','maple syrup':'syrups maple','egg yolk':'egg yolk raw fresh','egg yolks':'egg yolk raw fresh','egg white':'egg white raw fresh','egg whites':'egg white raw fresh','egg':'egg whole raw fresh','eggs':'egg whole raw fresh','cocoa powder':'cocoa powder unsweetened','vanilla extract':'vanilla extract','baking soda':'leavening baking soda','baking powder':'leavening baking powder','olive oil':'oil olive salad or cooking','vegetable oil':'oil vegetable salad or cooking','coconut oil':'oil coconut','sesame oil':'oil sesame salad or cooking','espresso':'beverages coffee brewed espresso','banana':'bananas raw','apple':'apples raw yellow','tomato':'tomatoes red ripe raw','onion':'onions raw','garlic clove':'garlic raw','garlic':'garlic raw','chicken breast':'chicken breast meat only raw','chicken thigh':'chicken broilers fryers thigh meat only raw','salmon':'fish salmon atlantic raw','tuna':'fish tuna light canned water','shrimp':'crustaceans shrimp mixed species raw','ground beef':'beef ground 80% lean','chicken broth':'chicken broth ready-to-serve','chicken stock':'chicken broth ready-to-serve','beef broth':'soup stock beef home-prepared','beef stock':'soup stock beef home-prepared','tomato paste':'tomato paste','coconut milk':'coconut milk canned','peanut butter':'peanut butter smooth style without salt','soy sauce':'soy sauce','oatmeal':'oats rolled old fashioned','rolled oats':'oats rolled old fashioned','water':'water tap drinking','warm water':'water tap drinking','salt':'salt table','kosher salt':'salt table','sea salt':'salt table','lemon juice':'lemon juice raw','lime juice':'lime juice raw','chia seed':'seeds chia dried','chia seeds':'seeds chia dried','almond':'nuts almonds','almonds':'nuts almonds','walnut':'nuts walnuts','walnuts':'nuts walnuts','dark chocolate':'chocolate dark 70-85%','white rice':'rice white long-grain raw','brown rice':'rice brown long-grain raw','basmati rice':'rice white long-grain raw','jasmine rice':'rice white long-grain raw','quinoa':'quinoa uncooked','almond':'nuts almonds raw','almonds':'nuts almonds raw','greek yogurt':'yogurt greek plain nonfat','mascarpone':'mascarpone cheese' };
 const STRIP = new Set(['fresh','dried','frozen','canned','cooked','raw','whole','chopped','diced','minced','sliced','grated','shredded','peeled','boneless','skinless','unsalted','salted','large','medium','small','extra','organic','softened','melted','beaten','room','temperature','optional']);
 const NUTRIENT_IDS = { cal:[1008,2047,2048],protein:[1003],carbs:[1005],fat:[1004] };
@@ -175,22 +190,56 @@ function pickBest(foods,itemName) {
   return (isZero&&best)?best:(bestScore>0?best:null);
 }
 
+async function fetchByFdcId(fdcId) {
+  const nids=[...NUTRIENT_IDS.cal,...NUTRIENT_IDS.protein,...NUTRIENT_IDS.carbs,...NUTRIENT_IDS.fat].join('&nutrients=');
+  const url=USDA_BASE+'/food/'+fdcId+'?api_key='+USDA_API_KEY;
+  const r=await fetch(url);
+  if (!r.ok) return null;
+  const food=await r.json();
+  // Detail endpoint has different nutrient structure
+  const ns=food.foodNutrients||[];
+  const getName=n=>(n.nutrient&&n.nutrient.name)||n.nutrientName||n.name||'';
+  const getValue=n=>n.amount??n.value??0;
+  const get=(...terms)=>{for(const t of terms){const hit=ns.find(n=>getName(n).toLowerCase().includes(t));if(hit){const v=getValue(hit);if(v>0)return v;}}return 0;};
+  const nutrients={cal:get('energy','calorie'),protein:get('protein'),carbs:get('carbohydrate'),fat:get('total lipid','fat')};
+  // Also try inline search format
+  if(!nutrients.cal) {
+    const getById=(ids)=>{for(const id of ids){const hit=ns.find(n=>n.nutrientId===id||n.nutrientNumber===String(id));if(hit&&hit.value>0)return hit.value;}return 0;};
+    nutrients.cal=getById(NUTRIENT_IDS.cal);
+    nutrients.protein=getById(NUTRIENT_IDS.protein);
+    nutrients.carbs=getById(NUTRIENT_IDS.carbs);
+    nutrients.fat=getById(NUTRIENT_IDS.fat);
+  }
+  return {food:{description:food.description,fdcId:food.fdcId},nutrients};
+}
+
 async function lookupIngredient(item,rawAmount) {
   const parsed=parseAmount(rawAmount,item);
   let grams=parsed.grams;
   if (!grams&&parsed.qty) grams=estimateGrams(item,parsed.qty,parsed.unit);
   if (!grams||grams<=0) grams=100;
-  const cleaned=cleanName(item);
-  const queries=[cleaned,cleaned.split(' ').slice(0,3).join(' '),cleaned.split(' ').slice(0,2).join(' '),cleaned.split(' ')[0]];
-  let food=null;
-  for (const q of [...new Set(queries)]) {
-    if (!q||q.length<2) continue;
-    const foods=await searchUSDA(q);
-    const best=pickBest(foods,item);
-    if (best){food=best;break;}
+
+  // Check direct fdcId map first
+  const nameLower=item.toLowerCase().trim();
+  const directId=Object.entries(DIRECT_FDCIDS).find(([k])=>nameLower===k||nameLower.includes(k));
+  let food=null, per100g=null;
+  if (directId) {
+    const result=await fetchByFdcId(directId[1]);
+    if (result) { food=result.food; per100g=result.nutrients; }
   }
+
+  if (!food) {
+    const cleaned=cleanName(item);
+    const queries=[cleaned,cleaned.split(' ').slice(0,3).join(' '),cleaned.split(' ').slice(0,2).join(' '),cleaned.split(' ')[0]];
+    for (const q of [...new Set(queries)]) {
+      if (!q||q.length<2) continue;
+      const foods=await searchUSDA(q);
+      const best=pickBest(foods,item);
+      if (best){food=best;per100g=extractNutrients(best);break;}
+    }
+  }
+
   if (!food) return {grams,matchedFood:null,cal:null,protein:null,carbs:null,fat:null};
-  const per100g=extractNutrients(food);
   const scale=grams/100;
   return {grams:Math.round(grams),matchedFood:food.description,fdcId:food.fdcId,per100g,cal:Math.round(per100g.cal*scale),protein:parseFloat((per100g.protein*scale).toFixed(1)),carbs:parseFloat((per100g.carbs*scale).toFixed(1)),fat:parseFloat((per100g.fat*scale).toFixed(1))};
 }

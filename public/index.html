@@ -665,11 +665,7 @@ async function crossCheckMacros(recipeIdx) {
   } catch(e) { /* cross-check failed silently */ }
 }
 
-// ── Manual macro override ──────────────────────────────────────────────────
-function getOverrides(recipeIdx) {
-  return recipes[recipeIdx]._overrides || {};
-}
-
+// ── Manual macro override (recipe-level + ingredient-level) ──────────────
 function saveOverride(recipeIdx, field, value) {
   if (!recipes[recipeIdx]._overrides) recipes[recipeIdx]._overrides = {};
   const v = parseFloat(value);
@@ -682,8 +678,52 @@ function saveOverride(recipeIdx, field, value) {
   renderDetail(recipeIdx);
 }
 
+function saveIngOverride(recipeIdx, ingIdx, field, value) {
+  const r = recipes[recipeIdx];
+  if (!r.ingredients[ingIdx]._overrides) r.ingredients[ingIdx]._overrides = {};
+  const v = parseFloat(value);
+  if (!isNaN(v) && v >= 0) {
+    r.ingredients[ingIdx]._overrides[field] = v;
+  } else {
+    delete r.ingredients[ingIdx]._overrides[field];
+  }
+  // Recalculate recipe totals from ingredient overrides
+  recalcFromIngredients(recipeIdx);
+  persist();
+  renderDetail(recipeIdx);
+}
+
+function recalcFromIngredients(recipeIdx) {
+  const r = recipes[recipeIdx];
+  let totCal = 0, totPro = 0, totCarb = 0, totFat = 0;
+  let anyMacros = false;
+  r.ingredients.forEach(ing => {
+    const cal = (ing._overrides && ing._overrides.cal != null) ? ing._overrides.cal : (ing.cal || 0);
+    const pro = (ing._overrides && ing._overrides.protein != null) ? ing._overrides.protein : (ing.protein || 0);
+    const carb = (ing._overrides && ing._overrides.carbs != null) ? ing._overrides.carbs : (ing.carbs || 0);
+    const fat = (ing._overrides && ing._overrides.fat != null) ? ing._overrides.fat : (ing.fat || 0);
+    if (ing.cal != null || (ing._overrides && Object.keys(ing._overrides).length)) anyMacros = true;
+    totCal += cal; totPro += pro; totCarb += carb; totFat += fat;
+  });
+  if (anyMacros) {
+    const srv = r.servings || 1;
+    // Only update if not recipe-level overridden
+    if (!r._overrides || r._overrides.cal == null) r.cal = Math.round(totCal / srv);
+    if (!r._overrides || r._overrides.protein == null) r.protein = parseFloat((totPro / srv).toFixed(1));
+    if (!r._overrides || r._overrides.carbs == null) r.carbs = parseFloat((totCarb / srv).toFixed(1));
+    if (!r._overrides || r._overrides.fat == null) r.fat = parseFloat((totFat / srv).toFixed(1));
+  }
+}
+
 function clearOverrides(recipeIdx) {
   delete recipes[recipeIdx]._overrides;
+  persist();
+  renderDetail(recipeIdx);
+}
+
+function clearIngOverride(recipeIdx, ingIdx) {
+  delete recipes[recipeIdx].ingredients[ingIdx]._overrides;
+  recalcFromIngredients(recipeIdx);
   persist();
   renderDetail(recipeIdx);
 }
@@ -691,6 +731,10 @@ function clearOverrides(recipeIdx) {
 function getDisplayMacro(r, field) {
   const ov = r._overrides && r._overrides[field] != null ? r._overrides[field] : r[field];
   return ov != null ? ov : null;
+}
+
+function getIngDisplayMacro(ing, field) {
+  return (ing._overrides && ing._overrides[field] != null) ? ing._overrides[field] : (ing[field] != null ? ing[field] : null);
 }
 
 // ── Photo helpers ────────────────────────────────────────────────────────
@@ -816,10 +860,33 @@ function renderDetail(i){
   const macroSection=hasMacros(r)
     ?`<div class="macro-strip"><div class="macro-tile"><span class="macro-tile-val cal" id="d-cal">${dCal!=null?Math.round(dCal*factor):'—'}</span><div class="macro-tile-unit">kcal</div><div class="macro-tile-label">Calories${hasOv&&r._overrides&&r._overrides.cal!=null?' <span class=\"override-badge\">custom</span>':''}</div></div><div class="macro-tile"><span class="macro-tile-val pro" id="d-pro">${dPro!=null?Math.round(dPro*factor):'—'}</span><div class="macro-tile-unit">g</div><div class="macro-tile-label">Protein${hasOv&&r._overrides&&r._overrides.protein!=null?' <span class=\"override-badge\">custom</span>':''}</div></div><div class="macro-tile"><span class="macro-tile-val" id="d-carb">${dCarb!=null?Math.round(dCarb*factor):'—'}</span><div class="macro-tile-unit">g</div><div class="macro-tile-label">Carbs${hasOv&&r._overrides&&r._overrides.carbs!=null?' <span class=\"override-badge\">custom</span>':''}</div></div><div class="macro-tile"><span class="macro-tile-val" id="d-fat">${dFat!=null?Math.round(dFat*factor):'—'}</span><div class="macro-tile-unit">g</div><div class="macro-tile-label">Fat${hasOv&&r._overrides&&r._overrides.fat!=null?' <span class=\"override-badge\">custom</span>':''}</div></div></div>${warnHtml}${overrideHtml}`
     :`<div class="recalc-box"><p>Macros not yet calculated for this recipe.</p><button class="btn btn-primary" id="recalc-btn" onclick="recalcMacros(${i})">Calculate macros now</button></div>`;
-  const ings=r.ingredients.map(ing=>{
-    const scaledAmt=ing.rawAmount?scaleAmount(ing.rawAmount,factor):'';const hasMac=ing.cal!=null;
-    const macLine=hasMac?`<div class="ing-detail-mac">${Math.round((ing.cal||0)*factor)} kcal · P${parseFloat(((ing.protein||0)*factor).toFixed(1))}g · C${parseFloat(((ing.carbs||0)*factor).toFixed(1))}g · F${parseFloat(((ing.fat||0)*factor).toFixed(1))}g</div>`:'';
-    return `<div class="ing-detail-row"><span>${ing.item}</span><div class="ing-detail-right"><div class="ing-detail-amt">${scaledAmt}</div>${macLine}</div></div>`;
+  const ings=r.ingredients.map((ing,ingIdx)=>{
+    const scaledAmt=ing.rawAmount?scaleAmount(ing.rawAmount,factor):'';
+    const hasMac=ing.cal!=null||(ing._overrides&&Object.keys(ing._overrides).length>0);
+    const dCal=getIngDisplayMacro(ing,'cal'), dPro=getIngDisplayMacro(ing,'protein'), dCarb=getIngDisplayMacro(ing,'carbs'), dFat=getIngDisplayMacro(ing,'fat');
+    const hasIngOv=ing._overrides&&Object.keys(ing._overrides).length>0;
+    const ovBadge=hasIngOv?'<span class="override-badge">custom</span>':'';
+    const macLine=hasMac?`<div class="ing-detail-mac">${dCal!=null?Math.round(dCal*factor):0} kcal · P${dPro!=null?parseFloat((dPro*factor).toFixed(1)):0}g · C${dCarb!=null?parseFloat((dCarb*factor).toFixed(1)):0}g · F${dFat!=null?parseFloat((dFat*factor).toFixed(1)):0}g ${ovBadge}</div>`:'';
+    const ovPanel=`<div id="ing-ov-${i}-${ingIdx}" style="display:none;margin-top:6px;">
+      <div class="override-row">
+        <div class="override-field"><label>Cal</label><input type="number" min="0" placeholder="${dCal!=null?Math.round(dCal):''}" value="${ing._overrides&&ing._overrides.cal!=null?ing._overrides.cal:''}" onchange="saveIngOverride(${i},${ingIdx},'cal',this.value)"/></div>
+        <div class="override-field"><label>Protein g</label><input type="number" min="0" step="0.1" placeholder="${dPro!=null?parseFloat(dPro.toFixed(1)):''}" value="${ing._overrides&&ing._overrides.protein!=null?ing._overrides.protein:''}" onchange="saveIngOverride(${i},${ingIdx},'protein',this.value)"/></div>
+        <div class="override-field"><label>Carbs g</label><input type="number" min="0" step="0.1" placeholder="${dCarb!=null?parseFloat(dCarb.toFixed(1)):''}" value="${ing._overrides&&ing._overrides.carbs!=null?ing._overrides.carbs:''}" onchange="saveIngOverride(${i},${ingIdx},'carbs',this.value)"/></div>
+        <div class="override-field"><label>Fat g</label><input type="number" min="0" step="0.1" placeholder="${dFat!=null?parseFloat(dFat.toFixed(1)):''}" value="${ing._overrides&&ing._overrides.fat!=null?ing._overrides.fat:''}" onchange="saveIngOverride(${i},${ingIdx},'fat',this.value)"/></div>
+      </div>
+      ${hasIngOv?`<button class="override-toggle" style="color:var(--danger);margin-top:3px;" onclick="clearIngOverride(${i},${ingIdx})">✕ Clear</button>`:''}
+    </div>`;
+    return `<div class="ing-detail-row" style="flex-direction:column;align-items:stretch;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span>${ing.item}</span>
+        <div class="ing-detail-right">
+          <div class="ing-detail-amt">${scaledAmt}</div>
+          ${macLine}
+          <button class="override-toggle" style="text-align:right;" onclick="var p=document.getElementById('ing-ov-${i}-${ingIdx}');p.style.display=p.style.display==='none'?'block':'none'">${hasIngOv?'✏ overridden':'✏ override'}</button>
+        </div>
+      </div>
+      ${ovPanel}
+    </div>`;
   }).join('');
   const steps=r.steps&&r.steps.length?`<div class="detail-section">Instructions</div><ol class="steps-list">${r.steps.map((s,j)=>`<li><div class="step-num">${j+1}</div><span>${s}</span></li>`).join('')}</ol>`:'';
   const notesSection=r.notes?`<div class="detail-section">Notes</div><div class="detail-notes">${r.notes}</div>`:'';
