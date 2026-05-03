@@ -629,8 +629,14 @@ function renderSidebarFilters(){
   const allCats=['All',...categories.filter(c=>counts[c]>0)];
   document.getElementById('sidebar-filters').innerHTML=allCats.map(c=>{
     const cnt=c==='All'?recipes.length:(counts[c]||0);
-    return `<button class="filter-chip${filterCat===c?' active':''}" onclick="filterCat='${c}';renderLibrary()">${c}<span class="count">${cnt}</span></button>`;
+    return `<button class="filter-chip${filterCat===c?' active':''}" onclick="selectCategory('${c}')">${c}<span class="count">${cnt}</span></button>`;
   }).join('');
+}
+
+function selectCategory(cat){
+  filterCat=cat;
+  // Always navigate to library page when clicking sidebar category
+  showPage('library');
 }
 
 function renderDetail(i){

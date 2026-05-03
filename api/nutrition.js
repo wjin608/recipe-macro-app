@@ -283,11 +283,19 @@ function toGrams(qty, unit, itemName) {
 
 function estimateGrams(name, qty, unit) {
   const n = name.toLowerCase();
+  const u = (unit||'').toLowerCase();
+
+  // Check full "name + unit" combo first e.g. "large eggs" with unit "large"
+  const combined = (u + ' ' + n).trim();
+  const nameWithUnit = (n + ' ' + u).trim();
   for (const [k,v] of Object.entries(COUNTABLE)) {
-    if (n.includes(k)) return qty * v;
+    if (combined.includes(k) || nameWithUnit.includes(k) || n.includes(k)) return qty * v;
   }
-  const descriptors = { large:150, medium:100, small:70, whole:100 };
-  if (unit && descriptors[unit.toLowerCase()]) return qty * descriptors[unit.toLowerCase()];
+
+  // Descriptor words used as units (e.g. "2 large" eggs)
+  const descriptors = { large:57, medium:44, small:38, whole:50, extra:57 };
+  if (u && descriptors[u]) return qty * descriptors[u];
+
   return qty * 100;
 }
 
