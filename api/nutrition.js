@@ -138,13 +138,13 @@ const ALIASES = {
   'mozzarella':'cheese mozzarella whole milk',
   'cheddar':'cheese cheddar',
   'feta':'cheese feta',
-  'ricotta':'cheese ricotta part skim',
+  'ricotta':'cheese ricotta whole milk',
   // Sugars
   'white sugar':'sugars white granulated',
   'granulated sugar':'sugars white granulated',
   'caster sugar':'sugars white granulated',
   'cane sugar':'sugars white granulated',
-  'brown sugar':'sugars brown',
+  'brown sugar':'sugars brown packed',
   'powdered sugar':'sugars powdered confectioners',
   'icing sugar':'sugars powdered confectioners',
   'honey':'honey',
@@ -170,7 +170,7 @@ const ALIASES = {
   // Oils & fats
   'olive oil':'oil olive salad or cooking',
   'vegetable oil':'oil vegetable salad or cooking',
-  'coconut oil':'oil coconut',
+  'coconut oil':'oil coconut pure',
   'sesame oil':'oil sesame salad or cooking',
   'canola oil':'oil canola',
   'sunflower oil':'oil sunflower',
@@ -213,7 +213,7 @@ const ALIASES = {
   // Other
   'peanut butter':'peanut butter smooth style without salt',
   'almond butter':'nut butter almond',
-  'coconut milk':'coconut milk canned full fat',
+  'coconut milk':'coconut milk unsweetened canned',
   'water':'water tap drinking',
   'warm water':'water tap drinking',
   'cold water':'water tap drinking',
@@ -224,7 +224,7 @@ const ALIASES = {
   'cold water':'water tap drinking',
   'lukewarm water':'water tap drinking',
   'banana':'bananas raw',
-  'apple':'apples raw with skin',
+  'apple':'apples raw',
   'tomato':'tomatoes red ripe raw',
   'onion':'onions raw',
   'garlic clove':'garlic raw',
@@ -321,8 +321,8 @@ function toGrams(qty, unit, itemName) {
       };
       const resolvedName = DRY_SYNONYMS[name] || name;
       const isDryMatch = (rName, dry) =>
-        rName.includes(dry) || dry.includes(rName) ||
-        (rName.split(' ').length === 1 && dry.startsWith(rName));
+        rName.includes(dry) || (dry === rName) ||
+        (rName.split(' ').length === 1 && (dry === rName || dry.startsWith(rName + ' ') || dry.endsWith(' ' + rName)));
       const dryEntry = Object.entries(DRY_CUP_WEIGHTS).find(([dry]) => isDryMatch(resolvedName, dry));
       if (dryEntry) {
         const [, gramsPerCup] = dryEntry;
@@ -348,7 +348,7 @@ function toGrams(qty, unit, itemName) {
   const countableUnits = new Set(['piece','pieces','slice','slices','cookie','cookies','biscuit','biscuits','cracker','crackers','stalk','stalks','sprig','sprigs','strip','strips','clove','cloves','sheet','sheets','whole']);
   if (countableUnits.has(u) || u === '') {
     // Try to match item name against COUNTABLE table
-    for (const [k,v] of Object.entries(COUNTABLE)) {
+    for (const [k,v] of Object.entries(COUNTABLE).sort((a,b)=>b[0].length-a[0].length)) {
       if (name.includes(k) || k.includes(name.split(' ')[0])) {
         return { grams: qty * v, qty, unit: u };
       }
@@ -368,7 +368,7 @@ function estimateGrams(name, qty, unit) {
   // Check full "name + unit" combo first e.g. "large eggs" with unit "large"
   const combined = (u + ' ' + n).trim();
   const nameWithUnit = (n + ' ' + u).trim();
-  for (const [k,v] of Object.entries(COUNTABLE)) {
+  for (const [k,v] of Object.entries(COUNTABLE).sort((a,b)=>b[0].length-a[0].length)) {
     if (combined.includes(k) || nameWithUnit.includes(k) || n.includes(k)) return qty * v;
   }
 
