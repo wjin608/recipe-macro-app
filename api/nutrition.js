@@ -57,7 +57,10 @@ const LIQUID_DENSITY = {
   'butter':0.91, 'honey':1.42, 'maple syrup':1.32,
   'water':1.0, 'broth':1.0, 'stock':1.0,
   'coffee':1.0, 'espresso':1.0, 'juice':1.05,
-  'vinegar':1.01, 'soy sauce':1.18, 'coconut milk':1.02,
+  'vinegar':1.01, 'soy sauce':1.18,   'coconut milk':1.02,
+  'tomato paste':1.07,
+  'cream cheese':1.0,
+  'tahini':0.95,
 };
 
 // Dry ingredient cup weights (grams per cup) — overrides the 240ml water assumption
@@ -125,7 +128,7 @@ const ALIASES = {
   'half and half':'cream half and half',
   'whole milk':'milk whole 3.25%',
   'skim milk':'milk nonfat',
-  '2% milk':'milk reduced fat',
+  '2% milk':'milk reduced fat 2% milkfat',
   'butter':'butter without salt',
   'cream cheese':'cream cheese',
   'sour cream':'sour cream',
@@ -135,13 +138,13 @@ const ALIASES = {
   'mozzarella':'cheese mozzarella whole milk',
   'cheddar':'cheese cheddar',
   'feta':'cheese feta',
-  'ricotta':'cheese ricotta',
+  'ricotta':'cheese ricotta part skim',
   // Sugars
   'white sugar':'sugars white granulated',
   'granulated sugar':'sugars white granulated',
   'caster sugar':'sugars white granulated',
   'cane sugar':'sugars white granulated',
-  'brown sugar':'sugars brown packed',
+  'brown sugar':'sugars brown',
   'powdered sugar':'sugars powdered confectioners',
   'icing sugar':'sugars powdered confectioners',
   'honey':'honey',
@@ -183,14 +186,14 @@ const ALIASES = {
   'passata':'tomato puree',
   // Broths
   'chicken stock':'soup chicken broth',
-  'chicken broth':'soup stock chicken home-prepared',
+  'chicken broth':'chicken broth or bouillon dry ready-to-use',
   'chicken breast':'chicken broilers fryers breast meat only raw',
   'chicken thigh':'chicken broilers fryers thigh meat only raw',
   'turkey':'turkey breast meat only raw',
   'salmon':'fish salmon atlantic raw',
   'tuna':'fish tuna light canned water',
   'shrimp':'crustaceans shrimp mixed species raw',
-  'chicken stock':'soup stock chicken home-prepared',
+  'chicken stock':'chicken broth or bouillon ready to serve',
   'beef broth':'soup stock beef home-prepared',
   'beef stock':'soup stock beef home-prepared',
   'vegetable broth':'soup stock vegetable home-prepared',
@@ -198,19 +201,19 @@ const ALIASES = {
   'beef broth':'soup beef broth',
   'vegetable stock':'vegetable broth',
   // Grains & pasta
-  'white rice':'rice white long-grain',
+  'white rice':'rice white long-grain raw',
   'brown rice':'rice brown long-grain',
   'pasta':'pasta dry enriched',
-  'rolled oats':'oats rolled',
-  'oatmeal':'cereals oatmeal cooked',
+  'rolled oats':'oats rolled old fashioned',
+  'oatmeal':'oats rolled old fashioned',
   'instant oatmeal':'cereals oatmeal cooked',
   'quick oats':'oats rolled',
   'steel cut oats':'oats steel cut',
-  'quinoa':'quinoa',
+  'quinoa':'quinoa grain raw',
   // Other
   'peanut butter':'peanut butter smooth style without salt',
   'almond butter':'nut butter almond',
-  'coconut milk':'coconut milk canned',
+  'coconut milk':'coconut milk canned full fat',
   'water':'water tap drinking',
   'warm water':'water tap drinking',
   'cold water':'water tap drinking',
@@ -319,7 +322,7 @@ function toGrams(qty, unit, itemName) {
       const resolvedName = DRY_SYNONYMS[name] || name;
       const isDryMatch = (rName, dry) =>
         rName.includes(dry) || dry.includes(rName) ||
-        dry.split(' ').some(w => w.length > 3 && rName.includes(w));
+        (rName.split(' ').length === 1 && dry.startsWith(rName));
       const dryEntry = Object.entries(DRY_CUP_WEIGHTS).find(([dry]) => isDryMatch(resolvedName, dry));
       if (dryEntry) {
         const [, gramsPerCup] = dryEntry;
