@@ -48,7 +48,7 @@ const LIQUID_DENSITY = {
 
 // Recipe name → USDA search term
 const ALIASES = {
-  'mascarpone':'mascarpone cheese',
+  'mascarpone':'mascarpone',
   'heavy cream':'cream fluid heavy whipping',
   'double cream':'cream fluid heavy whipping',
   'whipping cream':'cream fluid heavy whipping',
@@ -59,7 +59,9 @@ const ALIASES = {
   'self raising flour':'wheat flour self rising',
   'powdered sugar':'sugar powdered',
   'icing sugar':'sugar powdered',
-  'caster sugar':'sugar white granulated',
+  'caster sugar':'sugars granulated',
+  'granulated sugar':'sugars granulated',
+  'white sugar':'sugars granulated',
   'brown sugar':'sugars brown',
   'baking soda':'leavening baking soda',
   'bicarbonate of soda':'leavening baking soda',
@@ -73,6 +75,8 @@ const ALIASES = {
   'vegetable oil':'oil vegetable',
   'coconut oil':'oil coconut',
   'sesame oil':'oil sesame',
+  'egg yolk':'egg yolk raw fresh',
+  'egg yolks':'egg yolk raw fresh',
   'greek yogurt':'yogurt greek plain',
   'greek yoghurt':'yogurt greek plain',
   'cream cheese':'cream cheese',
@@ -82,8 +86,9 @@ const ALIASES = {
   'cheddar':'cheese cheddar',
   'feta':'cheese feta',
   'ricotta':'cheese ricotta',
-  'ladyfinger':'ladyfingers',
-  'savoiardi':'ladyfingers',
+  'ladyfinger':'cookies ladyfingers',
+  'ladyfingers':'cookies ladyfingers',
+  'savoiardi':'cookies ladyfingers',
   'espresso':'coffee brewed espresso',
   'chicken stock':'chicken broth',
   'beef stock':'beef broth',
@@ -244,9 +249,9 @@ function cleanName(raw) {
 
 async function usdaSearch(query, includesBranded = false) {
   const dataType = includesBranded
-    ? 'SR Legacy,Foundation,Branded'
-    : 'SR Legacy,Foundation';
-  const url = `${USDA_BASE}/foods/search?query=${encodeURIComponent(query)}&dataType=${encodeURIComponent(dataType)}&pageSize=5&api_key=${USDA_API_KEY}`;
+    ? 'Foundation,SR Legacy,Branded'
+    : 'Foundation,SR Legacy';
+  const url = `${USDA_BASE}/foods/search?query=${encodeURIComponent(query)}&dataType=${encodeURIComponent(dataType)}&pageSize=8&api_key=${USDA_API_KEY}`;
   const r = await fetch(url);
   if (!r.ok) return [];
   const d = await r.json();
@@ -256,37 +261,52 @@ async function usdaSearch(query, includesBranded = false) {
 async function findFood(name) {
   const cleaned = cleanName(name);
 
-  // 4 attempts with progressively looser queries
   const queries = [
     cleaned,
     cleaned.split(' ').slice(0,2).join(' '),
     cleaned.split(' ')[0],
   ];
 
+  // Try each query, pick the food with the most complete nutrient data
   for (const q of queries) {
     if (!q || q.length < 2) continue;
     const foods = await usdaSearch(q);
-    // Try each result until we find one with valid nutrients (handles 404 IDs)
-    for (const food of foods) {
-      try {
-        await getNutrients(food.fdcId); // test it's accessible
-        return food;
-      } catch(e) {
-        console.log(`Skipping fdcId ${food.fdcId} for "${q}": ${e.message}`);
-        continue;
-      }
-    }
+    const best = await pickBestFood(foods);
+    if (best) return best;
   }
 
   // Last resort: include branded
   const foods = await usdaSearch(cleaned, true);
+  const best = await pickBestFood(foods);
+  return best || null;
+}
+
+// Pick the food result with the most complete macros (cal+protein+carbs+fat all > 0)
+async function pickBestFood(foods) {
+  let bestFood = null;
+  let bestScore = -1;
+
   for (const food of foods) {
     try {
-      await getNutrients(food.fdcId);
-      return food;
-    } catch(e) { continue; }
+      const nutrients = await getNutrients(food.fdcId);
+      // Score = number of non-zero macro fields
+      const score = (nutrients.cal > 0 ? 1 : 0)
+                  + (nutrients.protein > 0 ? 1 : 0)
+                  + (nutrients.carbs > 0 ? 1 : 0)
+                  + (nutrients.fat > 0 ? 1 : 0);
+      console.log(`Candidate "${food.description}" score:${score} cal:${nutrients.cal} carbs:${nutrients.carbs}`);
+      if (score > bestScore) {
+        bestScore = score;
+        bestFood = food;
+        // Perfect score — no need to check more
+        if (score === 4) break;
+      }
+    } catch(e) {
+      console.log(`Skipping fdcId ${food.fdcId}: ${e.message}`);
+      continue;
+    }
   }
-  return null;
+  return bestScore > 0 ? bestFood : null;
 }
 
 async function getNutrients(fdcId) {
@@ -389,6 +409,8 @@ export default async function handler(req, res) {
         matchedFood: food.description,
         fdcId: food.fdcId,
       };
+
+      console.log(`[${item}] matched:"${food.description}" grams:${Math.round(grams)} per100g:cal=${per100g.cal} pro=${per100g.protein} carb=${per100g.carbs} fat=${per100g.fat} → cal=${row.cal} carb=${row.carbs}`);
 
       totCal += row.cal; totPro += row.protein;
       totCarb += row.carbs; totFat += row.fat;
