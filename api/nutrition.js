@@ -29,6 +29,10 @@ const TO_GRAMS = {
 // Countable item weights in grams each
 const COUNTABLE = {
   egg:50, eggs:50,
+  'whole egg':50, 'whole eggs':50,
+  'large egg':57, 'large eggs':57,
+  'medium egg':44, 'medium eggs':44,
+  'small egg':38, 'small eggs':38,
   'chicken breast':174, 'chicken thigh':130,
   banana:118, apple:182, orange:131,
   lemon:84, lime:67, tomato:123,
@@ -40,6 +44,7 @@ const COUNTABLE = {
   cracker:7, crackers:7,
   stalk:40, stalks:40, sprig:2, sprigs:2,
   strip:15, strips:15, slice:28, piece:50,
+  'sundried tomato':5, 'sun-dried tomato':5,
 };
 
 // Liquid density g/ml for volume conversions
@@ -51,6 +56,32 @@ const LIQUID_DENSITY = {
   'water':1.0, 'broth':1.0, 'stock':1.0,
   'coffee':1.0, 'espresso':1.0, 'juice':1.05,
   'vinegar':1.01, 'soy sauce':1.18, 'coconut milk':1.02,
+};
+
+// Dry ingredient cup weights (grams per cup) — overrides the 240ml water assumption
+const DRY_CUP_WEIGHTS = {
+  // Flours
+  'flour':125, 'all-purpose flour':125, 'bread flour':127,
+  'whole wheat flour':120, 'self-raising flour':125,
+  'almond flour':96, 'cornstarch':128, 'corn starch':128,
+  // Sugars
+  'powdered sugar':120, 'icing sugar':120, 'brown sugar':220,
+  'granulated sugar':200, 'white sugar':200, 'caster sugar':200, 'sugar':200,
+  // Cocoa & chocolate
+  'cocoa powder':85, 'cocoa':85,
+  // Grains & dry goods
+  'oats':90, 'rolled oats':90, 'breadcrumbs':108,
+  'rice':185, 'quinoa':170,
+  // Produce (dried/dense)
+  'sundried tomato':55, 'sun-dried tomato':55, 'sundried tomatoes':55,
+  'sun-dried tomatoes':55, 'raisin':145, 'raisins':145,
+  'dried cranberry':145, 'dried cranberries':145,
+  // Nuts & seeds
+  'almond':143, 'almonds':143, 'walnut':117, 'walnuts':117,
+  'pecan':109, 'pecans':109, 'cashew':137, 'cashews':137,
+  'peanut':146, 'peanuts':146, 'sesame seed':144, 'chia seed':160,
+  // Other dry
+  'salt':288, 'parmesan':100, 'shredded cheese':113,
 };
 
 // Ingredient name → specific USDA search term
@@ -144,9 +175,23 @@ const ALIASES = {
   // Other
   'peanut butter':'peanut butter smooth',
   'coconut milk':'coconut milk canned',
-  'lemon juice':'lemon juice',
-  'lime juice':'lime juice',
-  'orange juice':'orange juice',
+  'lemon juice':'lemon juice raw',
+  'lime juice':'lime juice raw',
+  'orange juice':'orange juice raw',
+  // Eggs
+  'egg':'egg whole raw fresh',
+  'eggs':'egg whole raw fresh',
+  'whole egg':'egg whole raw fresh',
+  'whole eggs':'egg whole raw fresh',
+  // Sundried tomatoes
+  'sundried tomato':'tomatoes sun-dried',
+  'sundried tomatoes':'tomatoes sun-dried',
+  'sun dried tomato':'tomatoes sun-dried',
+  'sun dried tomatoes':'tomatoes sun-dried',
+  'sun-dried tomato':'tomatoes sun-dried',
+  'sun-dried tomatoes':'tomatoes sun-dried',
+  // Flour
+  'flour':'wheat flour all-purpose',
 };
 
 const STRIP = new Set([
@@ -196,6 +241,22 @@ function toGrams(qty, unit, itemName) {
     // Apply liquid density for volume units
     const volUnits = new Set(['cup','cups','tbsp','tablespoon','tablespoons','tsp','teaspoon','teaspoons','ml','l','liter','liters']);
     if (volUnits.has(u)) {
+      // For cup/tbsp/tsp, check dry ingredient weights first
+      const isDryMatch = (name, dry) => name.includes(dry) || dry.includes(name.split(' ').slice(0,2).join(' '));
+      const dryEntry = Object.entries(DRY_CUP_WEIGHTS).find(([dry]) => isDryMatch(name, dry));
+      if (dryEntry) {
+        const [, gramsPerCup] = dryEntry;
+        if (u === 'cup' || u === 'cups') {
+          return { grams: qty * gramsPerCup, qty, unit: u };
+        }
+        if (u === 'tbsp' || u === 'tablespoon' || u === 'tablespoons') {
+          return { grams: qty * (gramsPerCup / 16), qty, unit: u };
+        }
+        if (u === 'tsp' || u === 'teaspoon' || u === 'teaspoons') {
+          return { grams: qty * (gramsPerCup / 48), qty, unit: u };
+        }
+      }
+      // Liquid density for wet ingredients
       for (const [liquid, density] of Object.entries(LIQUID_DENSITY)) {
         if (name.includes(liquid)) { grams *= density; break; }
       }
@@ -204,13 +265,17 @@ function toGrams(qty, unit, itemName) {
   }
 
   // Countable units — look up by item name
-  const countableUnits = new Set(['piece','pieces','slice','slices','cookie','cookies','biscuit','biscuits','cracker','crackers','stalk','stalks','sprig','sprigs','strip','strips','clove','cloves','sheet','sheets']);
-  if (countableUnits.has(u)) {
+  const countableUnits = new Set(['piece','pieces','slice','slices','cookie','cookies','biscuit','biscuits','cracker','crackers','stalk','stalks','sprig','sprigs','strip','strips','clove','cloves','sheet','sheets','whole']);
+  if (countableUnits.has(u) || u === '') {
+    // Try to match item name against COUNTABLE table
     for (const [k,v] of Object.entries(COUNTABLE)) {
-      if (name.includes(k)) return { grams: qty * v, qty, unit: u };
+      if (name.includes(k) || k.includes(name.split(' ')[0])) {
+        return { grams: qty * v, qty, unit: u };
+      }
     }
-    const unitDefaults = { piece:50, slice:28, cookie:16, biscuit:16, cracker:7, stalk:40, sprig:2, clove:5, sheet:3, strip:15 };
-    return { grams: qty * (unitDefaults[u] ?? unitDefaults[u.replace(/s$/,'')] ?? 30), qty, unit: u };
+    // Unit-based fallback
+    const unitDefaults = { piece:50, pieces:50, whole:100, slice:28, cookie:16, biscuit:16, cracker:7, stalk:40, sprig:2, clove:5, sheet:3, strip:15 };
+    return { grams: qty * (unitDefaults[u] ?? unitDefaults[u.replace(/s$/,'')] ?? 50), qty, unit: u };
   }
 
   return { grams: null, qty, unit: u };
