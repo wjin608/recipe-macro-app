@@ -231,6 +231,15 @@ h1,h2,h3{font-family:'Lora',serif;}
 .bank-group-body .bank-table{margin-bottom:0;border-radius:0;}
 .bank-group-body .bank-table td:first-child{padding-left:18px;}
 .cat-badge{display:inline-block;font-size:10px;padding:1px 7px;border-radius:99px;background:var(--surface2);color:var(--text3);margin-left:4px;border:1px solid var(--border2);}
+
+/* ── Ingredient autocomplete ─────────────────────────────── */
+.ing-autocomplete-wrap{position:relative;flex:1;}
+.ing-autocomplete-wrap input{width:100%;}
+.ing-suggestions{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border2);border-radius:var(--radius);box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:200px;overflow-y:auto;margin-top:2px;}
+.ing-suggestion{padding:8px 12px;cursor:pointer;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:8px;}
+.ing-suggestion:hover,.ing-suggestion.active{background:var(--surface2);}
+.ing-suggestion-name{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ing-suggestion-meta{font-size:11px;color:var(--text3);white-space:nowrap;flex-shrink:0;}
 </style>
 </head>
 <body>
@@ -1039,8 +1048,86 @@ function addIngRow(prefix,item='',amount='',unit=''){
   const container=document.getElementById(`${prefix}-ing-rows`);if(!container)return;
   const row=document.createElement('div');row.className='ing-row-item';
   const unitOpts=UNITS.map(u=>`<option value="${u}"${u===unit?' selected':''}>${u||'—'}</option>`).join('');
-  row.innerHTML=`<input type="text" placeholder="e.g. Mascarpone" value="${item}"/><input type="text" placeholder="500" value="${amount}" style="text-align:right;"/><select style="font-size:13px;">${unitOpts}</select><button class="del-ing-btn" onclick="this.closest('.ing-row-item').remove()">×</button>`;
+  const safeItem = item.replace(/"/g,'&quot;');
+  row.innerHTML=`<div class="ing-autocomplete-wrap"><input type="text" placeholder="e.g. Mascarpone" value="${safeItem}" autocomplete="off" oninput="showIngSuggestions(this)" onblur="hideIngSuggestions(this,300)" onkeydown="navIngSuggestions(event,this)"/><div class="ing-suggestions" style="display:none;"></div></div><input type="text" placeholder="500" value="${amount}" style="text-align:right;"/><select style="font-size:13px;">${unitOpts}</select><button class="del-ing-btn" onclick="this.closest('.ing-row-item').remove()">×</button>`;
   container.appendChild(row);
+}
+
+function showIngSuggestions(input) {
+  const q = input.value.trim().toLowerCase();
+  const dropdown = input.nextElementSibling;
+  if (!dropdown) return;
+  if (q.length < 1) { dropdown.style.display = 'none'; return; }
+
+  // Search bank by name match
+  const matches = Object.values(bank)
+    .filter(e => e.name.includes(q) || (e.displayName||'').toLowerCase().includes(q))
+    .sort((a,b) => {
+      // Exact start match first
+      const aStart = a.name.startsWith(q) ? 0 : 1;
+      const bStart = b.name.startsWith(q) ? 0 : 1;
+      return aStart - bStart || a.name.localeCompare(b.name);
+    })
+    .slice(0, 8);
+
+  if (!matches.length) { dropdown.style.display = 'none'; return; }
+
+  dropdown.innerHTML = matches.map((e, i) => {
+    const macStr = e.cal != null ? Math.round(e.cal) + ' cal/100g' : '';
+    return `<div class="ing-suggestion" data-idx="${i}" data-name="${(e.displayName||e.name).replace(/"/g,'&quot;')}"
+      onmousedown="selectIngSuggestion(this,event)">
+      <span class="ing-suggestion-name">${e.displayName || e.name}</span>
+      <span class="ing-suggestion-meta">${macStr}</span>
+    </div>`;
+  }).join('');
+  dropdown.style.display = 'block';
+}
+
+function selectIngSuggestion(item, event) {
+  event.preventDefault(); // prevent blur from firing before click
+  const wrap = item.closest('.ing-autocomplete-wrap');
+  const input = wrap.querySelector('input');
+  input.value = item.dataset.name;
+  wrap.querySelector('.ing-suggestions').style.display = 'none';
+  // Move focus to amount field
+  const amountInput = wrap.closest('.ing-row-item').querySelector('input[style*="text-align:right"]');
+  if (amountInput) amountInput.focus();
+}
+
+function hideIngSuggestions(input, delay) {
+  setTimeout(() => {
+    const dropdown = input.nextElementSibling;
+    if (dropdown) dropdown.style.display = 'none';
+  }, delay || 150);
+}
+
+function navIngSuggestions(e, input) {
+  const dropdown = input.nextElementSibling;
+  if (!dropdown || dropdown.style.display === 'none') return;
+  const items = dropdown.querySelectorAll('.ing-suggestion');
+  const active = dropdown.querySelector('.ing-suggestion.active');
+  let idx = active ? parseInt(active.dataset.idx) : -1;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    idx = Math.min(idx + 1, items.length - 1);
+    items.forEach(i => i.classList.remove('active'));
+    items[idx]?.classList.add('active');
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    idx = Math.max(idx - 1, 0);
+    items.forEach(i => i.classList.remove('active'));
+    items[idx]?.classList.add('active');
+  } else if (e.key === 'Enter' || e.key === 'Tab') {
+    const activeItem = dropdown.querySelector('.ing-suggestion.active');
+    if (activeItem) {
+      e.preventDefault();
+      selectIngSuggestion(activeItem, e);
+    } else {
+      dropdown.style.display = 'none';
+    }
+  } else if (e.key === 'Escape') {
+    dropdown.style.display = 'none';
+  }
 }
 
 function renderCatChips(containerId,current,prefix){
@@ -1734,8 +1821,7 @@ const BANK_CATEGORIES = [
   'Nuts & Seeds',
   'Oils & Fats',
   'Sweeteners',
-  'Condiments & Sauces',
-  'Herbs & Spices',
+  'Condiments, Sauces & Spices',
   'Beverages',
   'Baking',
   'Tofu & Legumes',
@@ -1751,8 +1837,7 @@ const CATEGORY_ICONS = {
   'Nuts & Seeds':        '🥜',
   'Oils & Fats':         '🍶',
   'Sweeteners':          '🍯',
-  'Condiments & Sauces': '🧴',
-  'Herbs & Spices':      '🌿',
+  'Condiments, Sauces & Spices': '🌿',
   'Beverages':           '🧃',
   'Baking':              '🧁',
   'Tofu & Legumes':      '🌱',
@@ -1833,8 +1918,8 @@ const CATEGORY_RULES = [
     'corn syrup','golden syrup','treacle','condensed milk','simple syrup',
     '糖','冰糖','红糖',
   ]},
-  // Condiments & Sauces
-  { cat: 'Condiments & Sauces', keys: [
+  // Condiments, Sauces & Spices
+  { cat: 'Condiments, Sauces & Spices', keys: [
     'soy sauce','fish sauce','oyster sauce','hoisin sauce','teriyaki',
     'worcestershire','hot sauce','sriracha','tabasco','ketchup','mustard',
     'mayonnaise','ranch','vinegar','balsamic','tomato paste','tomato sauce',
@@ -1843,16 +1928,13 @@ const CATEGORY_RULES = [
     'sambal','shacha sauce','xo sauce','nam prik','ponzu','mirin','sake',
     'rice wine','shaoxing','broth','stock','bouillon','dashi',
     '酱油','蚝油','豆瓣酱','生抽','老抽','料酒','醋',
-  ]},
-  // Herbs & Spices
-  { cat: 'Herbs & Spices', keys: [
     'salt','pepper','cumin','coriander','turmeric','paprika','chili','cayenne',
     'cinnamon','nutmeg','clove','cardamom','star anise','bay leaf','thyme',
     'rosemary','basil','oregano','parsley','cilantro','mint','sage','tarragon',
     'dill','chive','lemongrass','galangal','five spice','szechuan','sichuan',
     'white pepper','black pepper','garlic powder','onion powder','curry',
     'garam masala','allspice','fennel seed','caraway','mustard seed',
-    'black bean','fermented black bean','dried chili','chili flake',
+    'black bean','fermented black bean','dried chili','chili flake','kosher',
     '花椒','八角','五香','胡椒','盐','香叶',
   ]},
   // Beverages
@@ -2011,22 +2093,22 @@ const PREPOPULATED_INGREDIENTS = [
   { name:'maple syrup',        cal:260, protein:0,    carbs:67,   fat:0.1,  stdWeight:null,unitType:'volume',    cat:'Sweeteners',        usdaMatch:'Syrups, maple' },
   { name:'powdered sugar',     cal:389, protein:0,    carbs:100,  fat:0,    stdWeight:null,unitType:'volume',    cat:'Sweeteners',        usdaMatch:'Sugars, powdered' },
   // Condiments & Sauces
-  { name:'soy sauce',          cal:53,  protein:8.1,  carbs:4.9,  fat:0.6,  stdWeight:null,unitType:'volume',    cat:'Condiments & Sauces', usdaMatch:'SOY SAUCE' },
-  { name:'oyster sauce',       cal:51,  protein:0.8,  carbs:10,   fat:0.1,  stdWeight:null,unitType:'volume',    cat:'Condiments & Sauces', usdaMatch:'Sauces, oyster' },
-  { name:'fish sauce',         cal:35,  protein:5.1,  carbs:3.6,  fat:0,    stdWeight:null,unitType:'volume',    cat:'Condiments & Sauces', usdaMatch:'Fish sauce' },
-  { name:'tomato paste',       cal:82,  protein:4.3,  carbs:19,   fat:0.5,  stdWeight:null,unitType:'volume',    cat:'Condiments & Sauces', usdaMatch:'TOMATO PASTE' },
-  { name:'chicken broth',      cal:6,   protein:0.6,  carbs:0.5,  fat:0.2,  stdWeight:null,unitType:'volume',    cat:'Condiments & Sauces', usdaMatch:'Soup, chicken broth, ready-to-serve' },
-  { name:'rice wine',          cal:134, protein:0.5,  carbs:5,    fat:0,    stdWeight:null,unitType:'volume',    cat:'Condiments & Sauces', usdaMatch:'Alcoholic beverage, wine, table, all' },
-  { name:'hoisin sauce',       cal:220, protein:4.1,  carbs:42,   fat:3.9,  stdWeight:null,unitType:'volume',    cat:'Condiments & Sauces', usdaMatch:'Sauce, hoisin' },
+  { name:'soy sauce',          cal:53,  protein:8.1,  carbs:4.9,  fat:0.6,  stdWeight:null,unitType:'volume',    cat:'Condiments, Sauces & Spices', usdaMatch:'SOY SAUCE' },
+  { name:'oyster sauce',       cal:51,  protein:0.8,  carbs:10,   fat:0.1,  stdWeight:null,unitType:'volume',    cat:'Condiments, Sauces & Spices', usdaMatch:'Sauces, oyster' },
+  { name:'fish sauce',         cal:35,  protein:5.1,  carbs:3.6,  fat:0,    stdWeight:null,unitType:'volume',    cat:'Condiments, Sauces & Spices', usdaMatch:'Fish sauce' },
+  { name:'tomato paste',       cal:82,  protein:4.3,  carbs:19,   fat:0.5,  stdWeight:null,unitType:'volume',    cat:'Condiments, Sauces & Spices', usdaMatch:'TOMATO PASTE' },
+  { name:'chicken broth',      cal:6,   protein:0.6,  carbs:0.5,  fat:0.2,  stdWeight:null,unitType:'volume',    cat:'Condiments, Sauces & Spices', usdaMatch:'Soup, chicken broth, ready-to-serve' },
+  { name:'rice wine',          cal:134, protein:0.5,  carbs:5,    fat:0,    stdWeight:null,unitType:'volume',    cat:'Condiments, Sauces & Spices', usdaMatch:'Alcoholic beverage, wine, table, all' },
+  { name:'hoisin sauce',       cal:220, protein:4.1,  carbs:42,   fat:3.9,  stdWeight:null,unitType:'volume',    cat:'Condiments, Sauces & Spices', usdaMatch:'Sauce, hoisin' },
   // Herbs & Spices
-  { name:'salt',               cal:0,   protein:0,    carbs:0,    fat:0,    stdWeight:null,unitType:'weight',    cat:'Herbs & Spices',    usdaMatch:'Salt, table' },
-  { name:'black pepper',       cal:251, protein:10,   carbs:64,   fat:3.3,  stdWeight:null,unitType:'weight',    cat:'Herbs & Spices',    usdaMatch:'Spices, pepper, black' },
-  { name:'garlic powder',      cal:331, protein:17,   carbs:73,   fat:0.7,  stdWeight:null,unitType:'weight',    cat:'Herbs & Spices',    usdaMatch:'Spices, garlic powder' },
-  { name:'cumin',              cal:375, protein:18,   carbs:44,   fat:22,   stdWeight:null,unitType:'weight',    cat:'Herbs & Spices',    usdaMatch:'Spices, cumin seed' },
-  { name:'cinnamon',           cal:247, protein:4,    carbs:81,   fat:1.2,  stdWeight:null,unitType:'weight',    cat:'Herbs & Spices',    usdaMatch:'Spices, cinnamon, ground' },
-  { name:'five spice',         cal:300, protein:13,   carbs:50,   fat:10,   stdWeight:null,unitType:'weight',    cat:'Herbs & Spices',    usdaMatch:'Spices, five spice' },
-  { name:'star anise',         cal:337, protein:18,   carbs:50,   fat:16,   stdWeight:null,unitType:'weight',    cat:'Herbs & Spices',    usdaMatch:'Spices, anise seed' },
-  { name:'chili flakes',       cal:282, protein:12,   carbs:50,   fat:12,   stdWeight:null,unitType:'weight',    cat:'Herbs & Spices',    usdaMatch:'Spices, pepper, red or cayenne' },
+  { name:'salt',               cal:0,   protein:0,    carbs:0,    fat:0,    stdWeight:null,unitType:'weight',    cat:'Condiments, Sauces & Spices',    usdaMatch:'Salt, table' },
+  { name:'black pepper',       cal:251, protein:10,   carbs:64,   fat:3.3,  stdWeight:null,unitType:'weight',    cat:'Condiments, Sauces & Spices',    usdaMatch:'Spices, pepper, black' },
+  { name:'garlic powder',      cal:331, protein:17,   carbs:73,   fat:0.7,  stdWeight:null,unitType:'weight',    cat:'Condiments, Sauces & Spices',    usdaMatch:'Spices, garlic powder' },
+  { name:'cumin',              cal:375, protein:18,   carbs:44,   fat:22,   stdWeight:null,unitType:'weight',    cat:'Condiments, Sauces & Spices',    usdaMatch:'Spices, cumin seed' },
+  { name:'cinnamon',           cal:247, protein:4,    carbs:81,   fat:1.2,  stdWeight:null,unitType:'weight',    cat:'Condiments, Sauces & Spices',    usdaMatch:'Spices, cinnamon, ground' },
+  { name:'five spice',         cal:300, protein:13,   carbs:50,   fat:10,   stdWeight:null,unitType:'weight',    cat:'Condiments, Sauces & Spices',    usdaMatch:'Spices, five spice' },
+  { name:'star anise',         cal:337, protein:18,   carbs:50,   fat:16,   stdWeight:null,unitType:'weight',    cat:'Condiments, Sauces & Spices',    usdaMatch:'Spices, anise seed' },
+  { name:'chili flakes',       cal:282, protein:12,   carbs:50,   fat:12,   stdWeight:null,unitType:'weight',    cat:'Condiments, Sauces & Spices',    usdaMatch:'Spices, pepper, red or cayenne' },
   // Beverages
   { name:'water',              cal:0,   protein:0,    carbs:0,    fat:0,    stdWeight:null,unitType:'volume',    cat:'Beverages',         usdaMatch:'Beverages, water, tap, drinking' },
   // Baking
@@ -2055,7 +2137,9 @@ function fixBankCategories() {
               'five spice','szechuan','sichuan','garlic powder','onion powder',
               'curry','garam masala','chili flake','chili powder','allspice',
               'fennel seed','caraway','mustard seed','kosher','black bean paste',
-              'white pepper'], cat: 'Herbs & Spices' },
+              'white pepper','soy sauce','fish sauce','oyster sauce','hoisin',
+              'vinegar','balsamic','miso','sriracha','ketchup','broth','stock',
+              'mirin','sake','rice wine','ponzu','bouillon'], cat: 'Condiments, Sauces & Spices' },
     { keys: ['sugar','honey','maple syrup','molasses','agave','stevia',
               'brown sugar','powdered sugar','caster sugar','palm sugar',
               'rock sugar','corn syrup','golden syrup','granulated sugar',
