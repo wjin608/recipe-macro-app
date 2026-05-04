@@ -2659,12 +2659,20 @@ function confirmMerge() {
   if(bankMergeSelected.size<2){alert('Select at least 2 ingredients to merge.');return;}
   const names=[...bankMergeSelected];
   const entries=names.map(n=>bank[n]).filter(Boolean);
-  const opts=entries.map(e=>`<div class="pick-item" onclick="executeMerge('${e.name}',${JSON.stringify(names)})">${e.displayName||e.name}<div style="font-size:11px;color:var(--text3);">${e.usdaMatch||'manual'}</div></div>`).join('');
+  // Store merge candidates globally to avoid quote issues in onclick
+  window._mergeNames = names;
+  const opts=entries.map((e,idx)=>`<div class="pick-item" onclick="executeMergeByIndex(${idx})" style="cursor:pointer;">${e.displayName||e.name}<div style="font-size:11px;color:var(--text3);">${e.usdaMatch||'manual'}</div></div>`).join('');
   showModal('merge-modal',`
     <div class="modal-title">Merge ${names.length} ingredients</div>
     <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Select which entry to keep. All recipes update automatically.</p>
     <div class="pick-list">${opts}</div>
     <button class="btn btn-secondary" style="width:100%;margin-top:8px;" onclick="closeModal('merge-modal')">Cancel</button>`);
+}
+
+function executeMergeByIndex(keepIdx) {
+  const allNames = window._mergeNames;
+  if (!allNames) return;
+  executeMerge(allNames[keepIdx], allNames);
 }
 
 function executeMerge(keepName, allNames) {
