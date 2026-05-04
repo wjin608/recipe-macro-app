@@ -217,6 +217,20 @@ h1,h2,h3{font-family:'Lora',serif;}
 .unit-tab{padding:4px 10px;border-radius:99px;font-size:12px;cursor:pointer;border:1px solid var(--border2);background:#fff;font-family:'DM Sans',sans-serif;}
 .unit-tab.active{background:var(--text);color:#fff;border-color:var(--text);}
 .merge-sel{width:16px;height:16px;cursor:pointer;}
+
+/* ── Bank accordion ──────────────────────────────────────── */
+.bank-group{margin-bottom:8px;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;}
+.bank-group-header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--surface2);cursor:pointer;user-select:none;}
+.bank-group-header:hover{background:var(--bg);}
+.bank-group-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text2);display:flex;align-items:center;gap:8px;}
+.bank-group-count{font-size:11px;font-weight:400;color:var(--text3);text-transform:none;letter-spacing:0;}
+.bank-group-arrow{font-size:10px;color:var(--text3);transition:transform 0.2s;display:inline-block;}
+.bank-group-arrow.open{transform:rotate(90deg);}
+.bank-group-body{display:none;}
+.bank-group-body.open{display:block;}
+.bank-group-body .bank-table{margin-bottom:0;border-radius:0;}
+.bank-group-body .bank-table td:first-child{padding-left:18px;}
+.cat-badge{display:inline-block;font-size:10px;padding:1px 7px;border-radius:99px;background:var(--surface2);color:var(--text3);margin-left:4px;border:1px solid var(--border2);}
 </style>
 </head>
 <body>
@@ -329,8 +343,9 @@ h1,h2,h3{font-family:'Lora',serif;}
     <div class="page" id="page-bank">
       <div class="page-header">
         <div><h1 class="page-title">Ingredient Bank</h1><div class="page-subtitle" id="bank-subtitle"></div></div>
-        <div style="display:flex;gap:8px;align-items:center;">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <button class="btn btn-secondary" id="merge-btn" onclick="confirmMerge()" style="display:none;">Merge selected</button>
+          <button class="btn btn-secondary" id="pull-btn" onclick="triggerBankPopulate()" title="Fetch all recipe ingredients from USDA and add to bank">↓ Pull from recipes</button>
           <button class="btn btn-primary" onclick="openBankAddModal()">+ Add ingredient</button>
         </div>
       </div>
@@ -1706,6 +1721,358 @@ showPage = function(page) {
 };
 
 
+
+// ══════════════════════════════════════════════════════════════════════════
+// INGREDIENT BANK CATEGORIES
+// ══════════════════════════════════════════════════════════════════════════
+const BANK_CATEGORIES = [
+  'Meat & Seafood',
+  'Dairy & Eggs',
+  'Vegetables',
+  'Fruits',
+  'Grains & Starches',
+  'Nuts & Seeds',
+  'Oils & Fats',
+  'Sweeteners',
+  'Condiments & Sauces',
+  'Herbs & Spices',
+  'Beverages',
+  'Baking',
+  'Tofu & Legumes',
+  'Other',
+];
+
+const CATEGORY_ICONS = {
+  'Meat & Seafood':      '🥩',
+  'Dairy & Eggs':        '🥛',
+  'Vegetables':          '🥦',
+  'Fruits':              '🍎',
+  'Grains & Starches':   '🌾',
+  'Nuts & Seeds':        '🥜',
+  'Oils & Fats':         '🫙',
+  'Sweeteners':          '🍯',
+  'Condiments & Sauces': '🧴',
+  'Herbs & Spices':      '🌿',
+  'Beverages':           '🧃',
+  'Baking':              '🧁',
+  'Tofu & Legumes':      '🫘',
+  'Other':               '📦',
+};
+
+// Rule-based category assignment — keyword matching on ingredient name
+const CATEGORY_RULES = [
+  // Meat & Seafood
+  { cat: 'Meat & Seafood', keys: [
+    'chicken','turkey','beef','pork','lamb','duck','veal','bison','venison',
+    'bacon','ham','sausage','salami','pepperoni','prosciutto','pancetta',
+    'salmon','tuna','cod','tilapia','shrimp','prawn','crab','lobster','scallop',
+    'squid','octopus','mussel','clam','oyster','anchovy','sardine','mackerel',
+    'halibut','sea bass','snapper','mahi','catfish','trout','herring',
+    'ground meat','minced','loin','breast','thigh','wing','drumstick','rib',
+    'steak','fillet','filet','tenderloin','sirloin','chuck','brisket',
+    '猪肉','牛肉','鸡肉','鱼','虾','肉',
+  ]},
+  // Dairy & Eggs
+  { cat: 'Dairy & Eggs', keys: [
+    'egg','milk','cream','butter','cheese','yogurt','ricotta','mascarpone',
+    'mozzarella','parmesan','cheddar','brie','gouda','feta','gruyere',
+    'cottage cheese','cream cheese','sour cream','whey','ghee','kefir',
+    'half and half','condensed milk','evaporated milk','buttermilk',
+    '牛奶','奶油','鸡蛋','奶酪',
+  ]},
+  // Vegetables
+  { cat: 'Vegetables', keys: [
+    'broccoli','spinach','kale','lettuce','cabbage','carrot','celery','onion',
+    'garlic','ginger','tomato','cucumber','zucchini','eggplant','pepper','capsicum',
+    'mushroom','cauliflower','asparagus','artichoke','leek','shallot','scallion',
+    'bok choy','napa cabbage','chinese cabbage','bean sprout','bamboo shoot',
+    'water chestnut','lotus root','bitter melon','daikon','radish','turnip',
+    'beet','sweet potato','potato','corn','pea','green bean','edamame',
+    'snow pea','pumpkin','squash','okra','fennel','brussels sprout',
+    '白菜','茄子','豆腐','萝卜','土豆','大葱','姜','大蒜','辣椒',
+    'sundried tomato','sun-dried tomato','roasted pepper',
+  ]},
+  // Fruits
+  { cat: 'Fruits', keys: [
+    'apple','banana','orange','lemon','lime','mango','pineapple','strawberry',
+    'blueberry','raspberry','blackberry','grape','watermelon','cantaloupe',
+    'peach','pear','plum','cherry','kiwi','avocado','coconut','fig','date',
+    'apricot','papaya','guava','passion fruit','lychee','longan','durian',
+    'pomegranate','cranberry','grapefruit','tangerine','mandarin',
+    'lemon juice','lime juice','orange juice',
+  ]},
+  // Grains & Starches
+  { cat: 'Grains & Starches', keys: [
+    'rice','noodle','pasta','flour','oat','bread','tortilla','quinoa',
+    'barley','millet','bulgur','couscous','polenta','cornmeal','cornstarch',
+    'breadcrumb','crouton','cracker','wrap','pita','baguette','sourdough',
+    'panko','semolina','farro','spelt','rye','wheat','spaghetti','linguine',
+    'penne','fettuccine','udon','soba','ramen','vermicelli','glass noodle',
+    'rice noodle','egg noodle','wonton wrapper','dumpling wrapper','spring roll wrapper',
+    '米','面','粉','饺子皮','春卷皮',
+  ]},
+  // Nuts & Seeds
+  { cat: 'Nuts & Seeds', keys: [
+    'almond','walnut','cashew','peanut','pecan','pistachio','hazelnut',
+    'macadamia','pine nut','chestnut','sesame','chia','flaxseed','hemp seed',
+    'sunflower seed','pumpkin seed','poppy seed','tahini','peanut butter',
+    'almond butter','cashew butter','sunflower butter',
+    '芝麻','花生','核桃',
+  ]},
+  // Oils & Fats
+  { cat: 'Oils & Fats', keys: [
+    'oil','lard','shortening','margarine','ghee',
+    'olive oil','vegetable oil','coconut oil','sesame oil','avocado oil',
+    'canola oil','sunflower oil','peanut oil','chili oil','duck fat',
+    '香油','芝麻油',
+  ]},
+  // Sweeteners
+  { cat: 'Sweeteners', keys: [
+    'sugar','honey','maple syrup','molasses','agave','stevia','splenda',
+    'brown sugar','powdered sugar','caster sugar','palm sugar','rock sugar',
+    'corn syrup','golden syrup','treacle','condensed milk','simple syrup',
+    '糖','冰糖','红糖',
+  ]},
+  // Condiments & Sauces
+  { cat: 'Condiments & Sauces', keys: [
+    'soy sauce','fish sauce','oyster sauce','hoisin sauce','teriyaki',
+    'worcestershire','hot sauce','sriracha','tabasco','ketchup','mustard',
+    'mayonnaise','ranch','vinegar','balsamic','tomato paste','tomato sauce',
+    'marinara','pesto','salsa','hummus','tahini sauce','miso','doubanjiang',
+    'black bean sauce','plum sauce','sweet chili','chili garlic','gochujang',
+    'sambal','shacha sauce','xo sauce','nam prik','ponzu','mirin','sake',
+    'rice wine','shaoxing','broth','stock','bouillon','dashi',
+    '酱油','蚝油','豆瓣酱','生抽','老抽','料酒','醋',
+  ]},
+  // Herbs & Spices
+  { cat: 'Herbs & Spices', keys: [
+    'salt','pepper','cumin','coriander','turmeric','paprika','chili','cayenne',
+    'cinnamon','nutmeg','clove','cardamom','star anise','bay leaf','thyme',
+    'rosemary','basil','oregano','parsley','cilantro','mint','sage','tarragon',
+    'dill','chive','lemongrass','galangal','five spice','szechuan','sichuan',
+    'white pepper','black pepper','garlic powder','onion powder','curry',
+    'garam masala','allspice','fennel seed','caraway','mustard seed',
+    'black bean','fermented black bean','dried chili','chili flake',
+    '花椒','八角','五香','胡椒','盐','香叶',
+  ]},
+  // Beverages
+  { cat: 'Beverages', keys: [
+    'water','tea','coffee','juice','wine','beer','sake','spirits','vodka',
+    'rum','whiskey','gin','broth','stock','coconut water','almond milk',
+    'oat milk','soy milk','sparkling water','broth',
+    '茶','咖啡','水',
+  ]},
+  // Baking
+  { cat: 'Baking', keys: [
+    'baking powder','baking soda','yeast','vanilla','cocoa','chocolate',
+    'gelatin','agar','arrowroot','xanthan','cream of tartar','food coloring',
+    'sprinkle','frosting','fondant','marzipan','ladyfinger','savoiardi',
+    'dark chocolate','white chocolate','milk chocolate','chocolate chip',
+    'cocoa powder','cacao',
+    '泡打粉','小苏打','香草',
+  ]},
+  // Tofu & Legumes
+  { cat: 'Tofu & Legumes', keys: [
+    'tofu','tempeh','seitan','lentil','chickpea','black bean','kidney bean',
+    'cannellini','navy bean','pinto bean','soybean','mung bean','adzuki',
+    'edamame','split pea','dal','hummus','bean curd','silken tofu',
+    'firm tofu','soft tofu','fried tofu','tofu puff',
+    '豆腐','豆干','黄豆','绿豆','红豆','黑豆',
+  ]},
+];
+
+function assignCategoryRule(name) {
+  const n = (name||'').toLowerCase();
+  for (const rule of CATEGORY_RULES) {
+    if (rule.keys.some(k => n.includes(k))) return rule.cat;
+  }
+  return null; // no match — needs AI
+}
+
+async function assignCategoryAI(name) {
+  try {
+    const resp = await fetch('/api/proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 20,
+        messages: [{
+          role: 'user',
+          content: `Classify this ingredient into exactly one category. Reply with ONLY the category name, nothing else.\n\nIngredient: "${name}"\n\nCategories: ${BANK_CATEGORIES.join(', ')}`
+        }]
+      })
+    });
+    const data = await resp.json();
+    const raw = (data.content?.[0]?.text || '').trim();
+    // Validate it's one of our categories
+    const match = BANK_CATEGORIES.find(cat => raw.toLowerCase().includes(cat.toLowerCase()));
+    return match || 'Other';
+  } catch(e) { return 'Other'; }
+}
+
+async function getCategory(name) {
+  const rule = assignCategoryRule(name);
+  if (rule) return rule;
+  return await assignCategoryAI(name);
+}
+
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// PRE-POPULATED INGREDIENT LIST (Western + Chinese cuisine)
+// Per-100g macros sourced from USDA SR Legacy
+// ══════════════════════════════════════════════════════════════════════════
+const PREPOPULATED_INGREDIENTS = [
+  // Meat & Seafood
+  { name:'chicken breast',     cal:165, protein:31,   carbs:0,    fat:3.6,  stdWeight:174, unitType:'countable', cat:'Meat & Seafood',    usdaMatch:'Chicken, broilers or fryers, breast, meat only, raw' },
+  { name:'chicken thigh',      cal:177, protein:18,   carbs:0,    fat:11,   stdWeight:130, unitType:'countable', cat:'Meat & Seafood',    usdaMatch:'Chicken, thigh, meat only, raw' },
+  { name:'ground beef',        cal:254, protein:17,   carbs:0,    fat:20,   stdWeight:null,unitType:'weight',    cat:'Meat & Seafood',    usdaMatch:'Beef, ground, 80% lean, raw' },
+  { name:'ground turkey',      cal:149, protein:17,   carbs:0,    fat:8.3,  stdWeight:null,unitType:'weight',    cat:'Meat & Seafood',    usdaMatch:'Turkey, ground, raw' },
+  { name:'pork belly',         cal:518, protein:9.3,  carbs:0,    fat:53,   stdWeight:null,unitType:'weight',    cat:'Meat & Seafood',    usdaMatch:'Pork, fresh, belly, raw' },
+  { name:'salmon',             cal:208, protein:20,   carbs:0,    fat:13,   stdWeight:null,unitType:'weight',    cat:'Meat & Seafood',    usdaMatch:'Fish, salmon, Atlantic, farmed, raw' },
+  { name:'shrimp',             cal:99,  protein:18,   carbs:0.9,  fat:1.7,  stdWeight:null,unitType:'weight',    cat:'Meat & Seafood',    usdaMatch:'Crustaceans, shrimp, mixed species, raw' },
+  { name:'tuna',               cal:144, protein:23,   carbs:0,    fat:4.9,  stdWeight:null,unitType:'weight',    cat:'Meat & Seafood',    usdaMatch:'Fish, tuna, fresh, bluefin, raw' },
+  { name:'bacon',              cal:541, protein:17,   carbs:1.4,  fat:52,   stdWeight:null,unitType:'weight',    cat:'Meat & Seafood',    usdaMatch:'Pork, cured, bacon, unprepared' },
+  { name:'pork loin',          cal:182, protein:22,   carbs:0,    fat:10,   stdWeight:null,unitType:'weight',    cat:'Meat & Seafood',    usdaMatch:'Pork, fresh, loin, whole, raw' },
+  { name:'lamb',               cal:294, protein:16,   carbs:0,    fat:25,   stdWeight:null,unitType:'weight',    cat:'Meat & Seafood',    usdaMatch:'Lamb, domestic, composite of retail cuts, raw' },
+  // Dairy & Eggs
+  { name:'egg',                cal:143, protein:13,   carbs:0.7,  fat:9.5,  stdWeight:50,  unitType:'countable', cat:'Dairy & Eggs',      usdaMatch:'Egg, whole, raw, fresh' },
+  { name:'egg yolk',           cal:322, protein:15.9, carbs:3.6,  fat:26.5, stdWeight:17,  unitType:'countable', cat:'Dairy & Eggs',      usdaMatch:'Egg, yolk, raw, fresh' },
+  { name:'egg white',          cal:52,  protein:10.9, carbs:0.7,  fat:0.2,  stdWeight:33,  unitType:'countable', cat:'Dairy & Eggs',      usdaMatch:'Egg, white, raw, fresh' },
+  { name:'whole milk',         cal:61,  protein:3.2,  carbs:4.8,  fat:3.3,  stdWeight:null,unitType:'volume',    cat:'Dairy & Eggs',      usdaMatch:'Milk, whole, 3.25% milkfat' },
+  { name:'heavy cream',        cal:337, protein:2.8,  carbs:2.8,  fat:35,   stdWeight:null,unitType:'volume',    cat:'Dairy & Eggs',      usdaMatch:'Cream, fluid, heavy whipping' },
+  { name:'butter',             cal:717, protein:0.9,  carbs:0.1,  fat:81,   stdWeight:null,unitType:'volume',    cat:'Dairy & Eggs',      usdaMatch:'Butter, without salt' },
+  { name:'cream cheese',       cal:321, protein:7,    carbs:4.1,  fat:31,   stdWeight:null,unitType:'weight',    cat:'Dairy & Eggs',      usdaMatch:'Cheese, cream' },
+  { name:'greek yogurt',       cal:61,  protein:10,   carbs:3.6,  fat:0.4,  stdWeight:null,unitType:'weight',    cat:'Dairy & Eggs',      usdaMatch:'Yogurt, Greek, plain, nonfat' },
+  { name:'parmesan',           cal:431, protein:38,   carbs:4.1,  fat:29,   stdWeight:null,unitType:'weight',    cat:'Dairy & Eggs',      usdaMatch:'Cheese, parmesan, grated' },
+  { name:'mozzarella',         cal:300, protein:22,   carbs:2.2,  fat:22,   stdWeight:null,unitType:'weight',    cat:'Dairy & Eggs',      usdaMatch:'Cheese, mozzarella, whole milk' },
+  { name:'ricotta',            cal:150, protein:7.5,  carbs:7.3,  fat:10,   stdWeight:null,unitType:'weight',    cat:'Dairy & Eggs',      usdaMatch:'Cheese, ricotta, whole milk' },
+  { name:'sour cream',         cal:198, protein:2.4,  carbs:4.6,  fat:19,   stdWeight:null,unitType:'volume',    cat:'Dairy & Eggs',      usdaMatch:'Cream, sour, cultured' },
+  // Vegetables
+  { name:'garlic clove',       cal:149, protein:6.4,  carbs:33,   fat:0.5,  stdWeight:5,   unitType:'countable', cat:'Vegetables',        usdaMatch:'Garlic, raw' },
+  { name:'onion',              cal:40,  protein:1.1,  carbs:9.3,  fat:0.1,  stdWeight:110, unitType:'countable', cat:'Vegetables',        usdaMatch:'Onions, raw' },
+  { name:'tomato',             cal:18,  protein:0.9,  carbs:3.9,  fat:0.2,  stdWeight:123, unitType:'countable', cat:'Vegetables',        usdaMatch:'Tomatoes, red, ripe, raw' },
+  { name:'broccoli',           cal:34,  protein:2.8,  carbs:6.6,  fat:0.4,  stdWeight:null,unitType:'weight',    cat:'Vegetables',        usdaMatch:'Broccoli, raw' },
+  { name:'spinach',            cal:23,  protein:2.9,  carbs:3.6,  fat:0.4,  stdWeight:null,unitType:'weight',    cat:'Vegetables',        usdaMatch:'Spinach, raw' },
+  { name:'carrot',             cal:41,  protein:0.9,  carbs:10,   fat:0.2,  stdWeight:61,  unitType:'countable', cat:'Vegetables',        usdaMatch:'Carrots, raw' },
+  { name:'bell pepper',        cal:31,  protein:1,    carbs:6,    fat:0.3,  stdWeight:119, unitType:'countable', cat:'Vegetables',        usdaMatch:'Peppers, sweet, red, raw' },
+  { name:'mushroom',           cal:22,  protein:3.1,  carbs:3.3,  fat:0.3,  stdWeight:null,unitType:'weight',    cat:'Vegetables',        usdaMatch:'Mushrooms, white, raw' },
+  { name:'potato',             cal:77,  protein:2,    carbs:17,   fat:0.1,  stdWeight:213, unitType:'countable', cat:'Vegetables',        usdaMatch:'Potatoes, flesh and skin, raw' },
+  { name:'sweet potato',       cal:86,  protein:1.6,  carbs:20,   fat:0.1,  stdWeight:null,unitType:'weight',    cat:'Vegetables',        usdaMatch:'Sweet potato, raw, unprepared' },
+  { name:'bok choy',           cal:13,  protein:1.5,  carbs:2.2,  fat:0.2,  stdWeight:null,unitType:'weight',    cat:'Vegetables',        usdaMatch:'Cabbage, chinese (pak-choi), raw' },
+  { name:'napa cabbage',       cal:16,  protein:1.2,  carbs:3.2,  fat:0.2,  stdWeight:null,unitType:'weight',    cat:'Vegetables',        usdaMatch:'Cabbage, chinese (pe-tsai), raw' },
+  { name:'ginger',             cal:80,  protein:1.8,  carbs:18,   fat:0.8,  stdWeight:null,unitType:'weight',    cat:'Vegetables',        usdaMatch:'Ginger root, raw' },
+  { name:'scallion',           cal:32,  protein:1.8,  carbs:7.3,  fat:0.2,  stdWeight:null,unitType:'weight',    cat:'Vegetables',        usdaMatch:'Onions, spring or scallions, raw' },
+  { name:'celery',             cal:16,  protein:0.7,  carbs:3,    fat:0.2,  stdWeight:40,  unitType:'countable', cat:'Vegetables',        usdaMatch:'Celery, raw' },
+  { name:'zucchini',           cal:17,  protein:1.2,  carbs:3.1,  fat:0.3,  stdWeight:null,unitType:'weight',    cat:'Vegetables',        usdaMatch:'Squash, summer, zucchini, raw' },
+  { name:'eggplant',           cal:25,  protein:1,    carbs:5.9,  fat:0.2,  stdWeight:null,unitType:'weight',    cat:'Vegetables',        usdaMatch:'Eggplant, raw' },
+  { name:'corn',               cal:86,  protein:3.3,  carbs:19,   fat:1.4,  stdWeight:null,unitType:'weight',    cat:'Vegetables',        usdaMatch:'Corn, sweet, yellow, raw' },
+  { name:'cucumber',           cal:15,  protein:0.7,  carbs:3.6,  fat:0.1,  stdWeight:null,unitType:'weight',    cat:'Vegetables',        usdaMatch:'Cucumber, with peel, raw' },
+  { name:'bean sprout',        cal:30,  protein:3,    carbs:5.9,  fat:0.2,  stdWeight:null,unitType:'weight',    cat:'Vegetables',        usdaMatch:'Bean sprouts, mung, raw' },
+  { name:'daikon',             cal:18,  protein:0.6,  carbs:4.1,  fat:0.1,  stdWeight:null,unitType:'weight',    cat:'Vegetables',        usdaMatch:'Radishes, oriental, raw' },
+  // Fruits
+  { name:'banana',             cal:89,  protein:1.1,  carbs:23,   fat:0.3,  stdWeight:118, unitType:'countable', cat:'Fruits',            usdaMatch:'Bananas, raw' },
+  { name:'apple',              cal:52,  protein:0.3,  carbs:14,   fat:0.2,  stdWeight:182, unitType:'countable', cat:'Fruits',            usdaMatch:'Apples, raw, with skin' },
+  { name:'lemon',              cal:29,  protein:1.1,  carbs:9.3,  fat:0.3,  stdWeight:84,  unitType:'countable', cat:'Fruits',            usdaMatch:'Lemons, raw, without peel' },
+  { name:'lime',               cal:30,  protein:0.7,  carbs:11,   fat:0.2,  stdWeight:67,  unitType:'countable', cat:'Fruits',            usdaMatch:'Limes, raw' },
+  { name:'avocado',            cal:160, protein:2,    carbs:9,    fat:15,   stdWeight:201, unitType:'countable', cat:'Fruits',            usdaMatch:'Avocados, raw, all commercial varieties' },
+  { name:'orange',             cal:47,  protein:0.9,  carbs:12,   fat:0.1,  stdWeight:131, unitType:'countable', cat:'Fruits',            usdaMatch:'Oranges, raw, all commercial varieties' },
+  { name:'mango',              cal:60,  protein:0.8,  carbs:15,   fat:0.4,  stdWeight:null,unitType:'weight',    cat:'Fruits',            usdaMatch:'Mangos, raw' },
+  { name:'strawberry',         cal:32,  protein:0.7,  carbs:7.7,  fat:0.3,  stdWeight:null,unitType:'weight',    cat:'Fruits',            usdaMatch:'Strawberries, raw' },
+  { name:'blueberry',          cal:57,  protein:0.7,  carbs:14,   fat:0.3,  stdWeight:null,unitType:'weight',    cat:'Fruits',            usdaMatch:'Blueberries, raw' },
+  // Grains & Starches
+  { name:'white rice',         cal:365, protein:7,    carbs:80,   fat:0.7,  stdWeight:null,unitType:'weight',    cat:'Grains & Starches', usdaMatch:'Rice, white, long-grain, raw' },
+  { name:'all purpose flour',  cal:364, protein:10,   carbs:76,   fat:1,    stdWeight:null,unitType:'volume',    cat:'Grains & Starches', usdaMatch:'Flour, wheat, all-purpose' },
+  { name:'rolled oats',        cal:389, protein:17,   carbs:66,   fat:7,    stdWeight:null,unitType:'volume',    cat:'Grains & Starches', usdaMatch:'Oats, whole grain, rolled' },
+  { name:'pasta',              cal:371, protein:13,   carbs:75,   fat:1.8,  stdWeight:null,unitType:'weight',    cat:'Grains & Starches', usdaMatch:'PASTA' },
+  { name:'quinoa',             cal:368, protein:14,   carbs:64,   fat:6.1,  stdWeight:null,unitType:'weight',    cat:'Grains & Starches', usdaMatch:'Quinoa, uncooked' },
+  { name:'breadcrumbs',        cal:395, protein:14,   carbs:72,   fat:5.3,  stdWeight:null,unitType:'volume',    cat:'Grains & Starches', usdaMatch:'BREADCRUMBS, PLAIN' },
+  { name:'bread flour',        cal:361, protein:12,   carbs:73,   fat:1.7,  stdWeight:null,unitType:'volume',    cat:'Grains & Starches', usdaMatch:'Wheat flours, bread' },
+  { name:'rice noodle',        cal:364, protein:6,    carbs:80,   fat:0.6,  stdWeight:null,unitType:'weight',    cat:'Grains & Starches', usdaMatch:'Noodles, chinese, cellophane or long rice' },
+  { name:'udon noodle',        cal:111, protein:3,    carbs:23,   fat:0.7,  stdWeight:null,unitType:'weight',    cat:'Grains & Starches', usdaMatch:'Noodles, japanese, somen, dry' },
+  { name:'cornstarch',         cal:381, protein:0.3,  carbs:91,   fat:0.1,  stdWeight:null,unitType:'volume',    cat:'Grains & Starches', usdaMatch:'Starch, corn' },
+  // Nuts & Seeds
+  { name:'almond',             cal:579, protein:21,   carbs:22,   fat:50,   stdWeight:null,unitType:'volume',    cat:'Nuts & Seeds',      usdaMatch:'Nuts, almonds' },
+  { name:'walnut',             cal:654, protein:15,   carbs:14,   fat:65,   stdWeight:null,unitType:'volume',    cat:'Nuts & Seeds',      usdaMatch:'Nuts, walnuts, english' },
+  { name:'peanut butter',      cal:598, protein:22,   carbs:22,   fat:51,   stdWeight:null,unitType:'volume',    cat:'Nuts & Seeds',      usdaMatch:'Peanut butter, smooth' },
+  { name:'sesame seed',        cal:573, protein:18,   carbs:23,   fat:50,   stdWeight:null,unitType:'weight',    cat:'Nuts & Seeds',      usdaMatch:'Seeds, sesame seeds, whole, dried' },
+  { name:'chia seed',          cal:486, protein:17,   carbs:42,   fat:31,   stdWeight:null,unitType:'weight',    cat:'Nuts & Seeds',      usdaMatch:'Seeds, chia seeds, dried' },
+  { name:'cashew',             cal:553, protein:18,   carbs:30,   fat:44,   stdWeight:null,unitType:'weight',    cat:'Nuts & Seeds',      usdaMatch:'Nuts, cashew nuts, raw' },
+  // Oils & Fats
+  { name:'olive oil',          cal:884, protein:0,    carbs:0,    fat:100,  stdWeight:null,unitType:'volume',    cat:'Oils & Fats',       usdaMatch:'Oil, olive, salad or cooking' },
+  { name:'vegetable oil',      cal:884, protein:0,    carbs:0,    fat:100,  stdWeight:null,unitType:'volume',    cat:'Oils & Fats',       usdaMatch:'Oil, vegetable' },
+  { name:'sesame oil',         cal:884, protein:0,    carbs:0,    fat:100,  stdWeight:null,unitType:'volume',    cat:'Oils & Fats',       usdaMatch:'Oil, sesame, salad or cooking' },
+  { name:'coconut oil',        cal:892, protein:0,    carbs:0,    fat:100,  stdWeight:null,unitType:'volume',    cat:'Oils & Fats',       usdaMatch:'Oil, coconut' },
+  // Sweeteners
+  { name:'white sugar',        cal:387, protein:0,    carbs:100,  fat:0,    stdWeight:null,unitType:'volume',    cat:'Sweeteners',        usdaMatch:'Sugars, granulated' },
+  { name:'brown sugar',        cal:380, protein:0,    carbs:98,   fat:0,    stdWeight:null,unitType:'volume',    cat:'Sweeteners',        usdaMatch:'Sugars, brown' },
+  { name:'honey',              cal:304, protein:0.3,  carbs:82,   fat:0,    stdWeight:null,unitType:'volume',    cat:'Sweeteners',        usdaMatch:'Honey' },
+  { name:'maple syrup',        cal:260, protein:0,    carbs:67,   fat:0.1,  stdWeight:null,unitType:'volume',    cat:'Sweeteners',        usdaMatch:'Syrups, maple' },
+  { name:'powdered sugar',     cal:389, protein:0,    carbs:100,  fat:0,    stdWeight:null,unitType:'volume',    cat:'Sweeteners',        usdaMatch:'Sugars, powdered' },
+  // Condiments & Sauces
+  { name:'soy sauce',          cal:53,  protein:8.1,  carbs:4.9,  fat:0.6,  stdWeight:null,unitType:'volume',    cat:'Condiments & Sauces', usdaMatch:'SOY SAUCE' },
+  { name:'oyster sauce',       cal:51,  protein:0.8,  carbs:10,   fat:0.1,  stdWeight:null,unitType:'volume',    cat:'Condiments & Sauces', usdaMatch:'Sauces, oyster' },
+  { name:'fish sauce',         cal:35,  protein:5.1,  carbs:3.6,  fat:0,    stdWeight:null,unitType:'volume',    cat:'Condiments & Sauces', usdaMatch:'Fish sauce' },
+  { name:'tomato paste',       cal:82,  protein:4.3,  carbs:19,   fat:0.5,  stdWeight:null,unitType:'volume',    cat:'Condiments & Sauces', usdaMatch:'TOMATO PASTE' },
+  { name:'chicken broth',      cal:6,   protein:0.6,  carbs:0.5,  fat:0.2,  stdWeight:null,unitType:'volume',    cat:'Condiments & Sauces', usdaMatch:'Soup, chicken broth, ready-to-serve' },
+  { name:'rice wine',          cal:134, protein:0.5,  carbs:5,    fat:0,    stdWeight:null,unitType:'volume',    cat:'Condiments & Sauces', usdaMatch:'Alcoholic beverage, wine, table, all' },
+  { name:'hoisin sauce',       cal:220, protein:4.1,  carbs:42,   fat:3.9,  stdWeight:null,unitType:'volume',    cat:'Condiments & Sauces', usdaMatch:'Sauce, hoisin' },
+  // Herbs & Spices
+  { name:'salt',               cal:0,   protein:0,    carbs:0,    fat:0,    stdWeight:null,unitType:'weight',    cat:'Herbs & Spices',    usdaMatch:'Salt, table' },
+  { name:'black pepper',       cal:251, protein:10,   carbs:64,   fat:3.3,  stdWeight:null,unitType:'weight',    cat:'Herbs & Spices',    usdaMatch:'Spices, pepper, black' },
+  { name:'garlic powder',      cal:331, protein:17,   carbs:73,   fat:0.7,  stdWeight:null,unitType:'weight',    cat:'Herbs & Spices',    usdaMatch:'Spices, garlic powder' },
+  { name:'cumin',              cal:375, protein:18,   carbs:44,   fat:22,   stdWeight:null,unitType:'weight',    cat:'Herbs & Spices',    usdaMatch:'Spices, cumin seed' },
+  { name:'cinnamon',           cal:247, protein:4,    carbs:81,   fat:1.2,  stdWeight:null,unitType:'weight',    cat:'Herbs & Spices',    usdaMatch:'Spices, cinnamon, ground' },
+  { name:'five spice',         cal:300, protein:13,   carbs:50,   fat:10,   stdWeight:null,unitType:'weight',    cat:'Herbs & Spices',    usdaMatch:'Spices, five spice' },
+  { name:'star anise',         cal:337, protein:18,   carbs:50,   fat:16,   stdWeight:null,unitType:'weight',    cat:'Herbs & Spices',    usdaMatch:'Spices, anise seed' },
+  { name:'chili flakes',       cal:282, protein:12,   carbs:50,   fat:12,   stdWeight:null,unitType:'weight',    cat:'Herbs & Spices',    usdaMatch:'Spices, pepper, red or cayenne' },
+  // Beverages
+  { name:'water',              cal:0,   protein:0,    carbs:0,    fat:0,    stdWeight:null,unitType:'volume',    cat:'Beverages',         usdaMatch:'Beverages, water, tap, drinking' },
+  // Baking
+  { name:'baking powder',      cal:53,  protein:0,    carbs:28,   fat:0,    stdWeight:null,unitType:'weight',    cat:'Baking',            usdaMatch:'Leavening agents, baking powder' },
+  { name:'baking soda',        cal:0,   protein:0,    carbs:0,    fat:0,    stdWeight:null,unitType:'weight',    cat:'Baking',            usdaMatch:'Leavening agents, baking soda' },
+  { name:'vanilla extract',    cal:288, protein:0.1,  carbs:13,   fat:0.1,  stdWeight:null,unitType:'volume',    cat:'Baking',            usdaMatch:'Vanilla extract' },
+  { name:'cocoa powder',       cal:228, protein:20,   carbs:58,   fat:14,   stdWeight:null,unitType:'volume',    cat:'Baking',            usdaMatch:'Cocoa, dry powder, unsweetened' },
+  { name:'dark chocolate',     cal:599, protein:7.8,  carbs:46,   fat:43,   stdWeight:null,unitType:'weight',    cat:'Baking',            usdaMatch:'Chocolate, dark, 70-85% cacao solids' },
+  { name:'yeast',              cal:325, protein:40,   carbs:41,   fat:7.6,  stdWeight:null,unitType:'weight',    cat:'Baking',            usdaMatch:'Leavening agents, yeast, active dry' },
+  // Tofu & Legumes
+  { name:'firm tofu',          cal:76,  protein:8,    carbs:1.9,  fat:4.8,  stdWeight:null,unitType:'weight',    cat:'Tofu & Legumes',    usdaMatch:'Tofu, raw, firm' },
+  { name:'silken tofu',        cal:55,  protein:5.3,  carbs:2.0,  fat:2.7,  stdWeight:null,unitType:'weight',    cat:'Tofu & Legumes',    usdaMatch:'Tofu, raw, soft' },
+  { name:'chickpea',           cal:164, protein:8.9,  carbs:27,   fat:2.6,  stdWeight:null,unitType:'weight',    cat:'Tofu & Legumes',    usdaMatch:'Chickpeas (garbanzo beans, bengal gram), mature seeds, raw' },
+  { name:'lentil',             cal:353, protein:25,   carbs:60,   fat:1.1,  stdWeight:null,unitType:'weight',    cat:'Tofu & Legumes',    usdaMatch:'Lentils, raw' },
+  { name:'black bean',         cal:341, protein:22,   carbs:63,   fat:1.4,  stdWeight:null,unitType:'weight',    cat:'Tofu & Legumes',    usdaMatch:'Beans, black, mature seeds, raw' },
+  { name:'edamame',            cal:121, protein:11,   carbs:9,    fat:5.2,  stdWeight:null,unitType:'weight',    cat:'Tofu & Legumes',    usdaMatch:'Edamame, frozen, prepared' },
+];
+
+function prePopulateBank() {
+  let added = 0;
+  PREPOPULATED_INGREDIENTS.forEach(item => {
+    const key = bankKey(item.name);
+    if (bank[key]) return; // don't overwrite existing entries
+    bank[key] = {
+      name: key,
+      displayName: item.name.replace(/\b\w/g, l => l.toUpperCase()),
+      usdaMatch: item.usdaMatch,
+      fdcId: null,
+      cal: item.cal,
+      protein: item.protein,
+      carbs: item.carbs,
+      fat: item.fat,
+      stdWeight: item.stdWeight,
+      unitType: item.unitType,
+      category: item.cat,
+      overridden: false,
+      prePopulated: true,
+      addedAt: Date.now(),
+    };
+    added++;
+  });
+  if (added > 0) { persistBank(); console.log(`Pre-populated ${added} ingredients`); }
+  return added;
+}
+
+
 // ══════════════════════════════════════════════════════════════════════════
 // INGREDIENT BANK
 // ══════════════════════════════════════════════════════════════════════════
@@ -1851,6 +2218,7 @@ async function populateBankFromIngredients(ingredients) {
           .sort((a,b) => b[0].length - a[0].length)
           .find(([k]) => key.includes(k));
         const stdWeight = stdMatch ? stdMatch[1] : null;
+        const cat = assignCategoryRule(result.item) || 'Other';
         bank[key] = {
           name: key,
           displayName: result.item,
@@ -1859,9 +2227,16 @@ async function populateBankFromIngredients(ingredients) {
           cal, protein, carbs, fat,
           stdWeight,
           unitType: stdWeight ? 'countable' : 'weight',
+          category: cat,
           overridden: false,
           addedAt: Date.now(),
         };
+        // If rule couldn't assign category, use AI in background
+        if (cat === 'Other') {
+          assignCategoryAI(result.item).then(aiCat => {
+            if (bank[key]) { bank[key].category = aiCat; persistBank(); }
+          });
+        }
       });
       persistBank();
     } catch(e) { console.warn('Bank populate error:', e.message); }
@@ -1892,49 +2267,118 @@ async function recalcAllRecipesFromBank() {
 let bankMergeMode=false, bankMergeSelected=new Set();
 
 function renderBank() {
-  const entries=Object.values(bank);
-  const q=(document.getElementById('bank-search')?.value||'').toLowerCase();
-  const filtered=q?entries.filter(e=>e.name.includes(q)||(e.usdaMatch||'').toLowerCase().includes(q)):entries;
-  filtered.sort((a,b)=>a.name.localeCompare(b.name));
-  const sub=document.getElementById('bank-subtitle');
-  if(sub) sub.textContent=entries.length+' ingredient'+(entries.length!==1?'s':'')+' · '+entries.filter(e=>e.overridden).length+' overridden';
-  const mergeBtn=document.getElementById('merge-btn');
-  if(mergeBtn) mergeBtn.style.display=bankMergeMode?'block':'none';
-  if(!filtered.length){
-    document.getElementById('bank-table-wrap').innerHTML='<div class="empty-state"><h2>No ingredients yet</h2><p>Ingredients are added automatically when you save recipes. If you have existing recipes, click the button below to pull them in now.</p><button class="btn btn-primary" style="margin-top:12px;" onclick="triggerBankPopulate()">Pull ingredients from recipes</button></div>';
+  const entries = Object.values(bank);
+  const q = (document.getElementById('bank-search')?.value || '').toLowerCase();
+  const filtered = q
+    ? entries.filter(e => e.name.includes(q) || (e.usdaMatch||'').toLowerCase().includes(q) || (e.category||'').toLowerCase().includes(q))
+    : entries;
+
+  const sub = document.getElementById('bank-subtitle');
+  if (sub) sub.textContent = entries.length + ' ingredient' + (entries.length !== 1 ? 's' : '') + ' · ' + entries.filter(e => e.overridden).length + ' overridden';
+
+  const mergeBtn = document.getElementById('merge-btn');
+  if (mergeBtn) mergeBtn.style.display = bankMergeMode ? 'block' : 'none';
+
+  if (!filtered.length) {
+    document.getElementById('bank-table-wrap').innerHTML = '<div class="empty-state"><h2>No ingredients yet</h2><p>Ingredients are added automatically when you save recipes. Click "↓ Pull from recipes" to import existing recipe ingredients, or click "+ Add ingredient" to add one manually.</p></div>';
     return;
   }
-  const rows=filtered.map(e=>`<tr onclick="${bankMergeMode?`toggleMergeSelect('${e.name}')`:`openBankEdit('${e.name}')`}">
-    ${bankMergeMode?`<td><input type="checkbox" class="merge-sel" ${bankMergeSelected.has(e.name)?'checked':''} onclick="event.stopPropagation();toggleMergeSelect('${e.name}')"/></td>`:''}
-    <td><div class="bank-row-name">${e.displayName||e.name}${e.overridden?'<span class="ov-dot" title="Overridden"></span>':''}</div><div class="bank-row-usda">${e.usdaMatch||'No USDA match'}</div></td>
-    <td class="bank-num">${e.cal!=null?Math.round(e.cal):'—'}</td>
-    <td class="bank-num">${e.protein!=null?parseFloat(e.protein.toFixed(1)):'—'}</td>
-    <td class="bank-num">${e.carbs!=null?parseFloat(e.carbs.toFixed(1)):'—'}</td>
-    <td class="bank-num">${e.fat!=null?parseFloat(e.fat.toFixed(1)):'—'}</td>
-    <td style="font-size:11px;color:var(--text3);">${e.stdWeight?e.stdWeight+'g each':e.unitType||'weight'}</td>
-  </tr>`).join('');
-  document.getElementById('bank-table-wrap').innerHTML=`<table class="bank-table">
-    <thead><tr>${bankMergeMode?'<th></th>':''}<th>Ingredient</th><th class="bank-num">Cal/100g</th><th class="bank-num">Protein</th><th class="bank-num">Carbs</th><th class="bank-num">Fat</th><th>Std weight</th></tr></thead>
-    <tbody>${rows}</tbody></table>`;
+
+  // Group by category
+  const groups = {};
+  filtered.forEach(e => {
+    const cat = e.category || 'Other';
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(e);
+  });
+
+  // Sort categories: defined order first, then Other last
+  const catOrder = BANK_CATEGORIES;
+  const sortedCats = Object.keys(groups).sort((a, b) => {
+    const ai = catOrder.indexOf(a), bi = catOrder.indexOf(b);
+    if (ai < 0 && bi < 0) return a.localeCompare(b);
+    if (ai < 0) return 1; if (bi < 0) return -1;
+    return ai - bi;
+  });
+
+  const html = sortedCats.map(cat => {
+    const items = groups[cat].sort((a, b) => a.name.localeCompare(b.name));
+    const icon = CATEGORY_ICONS[cat] || '📦';
+    const groupId = 'bg-' + cat.replace(/[^a-z0-9]/gi, '_');
+    const rows = items.map(e => `
+      <tr onclick="${bankMergeMode ? `toggleMergeSelect('${e.name}')` : `openBankEdit('${e.name}')`}" style="cursor:pointer;">
+        ${bankMergeMode ? `<td style="padding:8px 12px;"><input type="checkbox" class="merge-sel" ${bankMergeSelected.has(e.name) ? 'checked' : ''} onclick="event.stopPropagation();toggleMergeSelect('${e.name}')"/></td>` : ''}
+        <td>
+          <div class="bank-row-name">${e.displayName || e.name}${e.overridden ? '<span class="ov-dot" title="Manually overridden"></span>' : ''}</div>
+          <div class="bank-row-usda">${e.usdaMatch || 'No USDA match'}</div>
+        </td>
+        <td class="bank-num">${e.cal != null ? Math.round(e.cal) : '—'}</td>
+        <td class="bank-num">${e.protein != null ? parseFloat(e.protein.toFixed(1)) : '—'}</td>
+        <td class="bank-num">${e.carbs != null ? parseFloat(e.carbs.toFixed(1)) : '—'}</td>
+        <td class="bank-num">${e.fat != null ? parseFloat(e.fat.toFixed(1)) : '—'}</td>
+        <td style="font-size:11px;color:var(--text3);">${e.stdWeight ? e.stdWeight + 'g each' : e.unitType || 'weight'}</td>
+      </tr>`).join('');
+
+    return `<div class="bank-group">
+      <div class="bank-group-header" onclick="toggleBankGroup('${groupId}')">
+        <div class="bank-group-title">
+          ${icon} ${cat} <span class="bank-group-count">${items.length} item${items.length !== 1 ? 's' : ''}</span>
+        </div>
+        <span class="bank-group-arrow" id="arr-${groupId}">▶</span>
+      </div>
+      <div class="bank-group-body" id="${groupId}">
+        <table class="bank-table" style="margin-bottom:0;">
+          <thead><tr>
+            ${bankMergeMode ? '<th></th>' : ''}
+            <th>Ingredient</th>
+            <th class="bank-num">Cal/100g</th>
+            <th class="bank-num">Protein</th>
+            <th class="bank-num">Carbs</th>
+            <th class="bank-num">Fat</th>
+            <th>Std weight</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('bank-table-wrap').innerHTML = html;
+
+  // Restore open/collapsed state from session
+  if (!window._bankOpenGroups) window._bankOpenGroups = new Set(sortedCats.slice(0, 3).map(c => 'bg-' + c.replace(/[^a-z0-9]/gi, '_')));
+  window._bankOpenGroups.forEach(id => {
+    const body = document.getElementById(id);
+    const arr = document.getElementById('arr-' + id);
+    if (body) { body.classList.add('open'); }
+    if (arr) { arr.classList.add('open'); }
+  });
 }
 
-async function triggerBankPopulate() {
-  if (!recipes.length) { alert('No recipes found. Add some recipes first.'); return; }
-  const btn = event.target;
-  btn.disabled = true; btn.textContent = 'Pulling ingredients…';
-  // Force re-fetch by temporarily clearing bank entries that have no override
-  const keys = Object.keys(bank).filter(k => !bank[k].overridden);
-  keys.forEach(k => delete bank[k]);
-  await recalcAllRecipesFromBank();
-  renderBank();
-  renderLibrary();
-  btn.disabled = false;
-  btn.textContent = 'Pull ingredients from recipes';
+function toggleBankGroup(id) {
+  if (!window._bankOpenGroups) window._bankOpenGroups = new Set();
+  const body = document.getElementById(id);
+  const arr = document.getElementById('arr-' + id);
+  if (!body) return;
+  const isOpen = body.classList.contains('open');
+  if (isOpen) {
+    body.classList.remove('open');
+    arr?.classList.remove('open');
+    window._bankOpenGroups.delete(id);
+  } else {
+    body.classList.add('open');
+    arr?.classList.add('open');
+    window._bankOpenGroups.add(id);
+  }
 }
+
 
 function openBankEdit(name) {
-  const e=bank[name]; if(!e) return;
-  showModal('bank-edit-modal',`
+  const e = bank[name]; if (!e) return;
+  const catOptions = BANK_CATEGORIES.map(cat =>
+    `<option value="${cat}" ${(e.category||'Other')===cat?'selected':''}>${CATEGORY_ICONS[cat]||''} ${cat}</option>`
+  ).join('');
+  showModal('bank-edit-modal', `
     <div class="modal-title">Edit: ${e.displayName||e.name}</div>
     <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">USDA match: <strong>${e.usdaMatch||'None'}</strong></div>
     <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);margin-bottom:8px;">Macros per 100g</div>
@@ -1949,14 +2393,17 @@ function openBankEdit(name) {
       ${['weight','volume','countable'].map(t=>`<div class="unit-tab${(e.unitType||'weight')===t?' active':''}" onclick="beSelectUnit('${t}',this)">${t}</div>`).join('')}
     </div>
     <div id="be-stdw-row" style="${e.unitType==='countable'?'':'display:none;'}margin-top:6px;">
-      <div class="modal-field"><label>Standard weight (g each)${e.stdWeight?' — pre-filled from built-in table':' — not in built-in table'}</label><input type="number" id="be-stdw" min="0" step="0.1" value="${e.stdWeight||''}"/></div>
+      <div class="modal-field"><label>Standard weight (g each)${e.stdWeight?' — pre-filled':' — not in table'}</label><input type="number" id="be-stdw" min="0" step="0.1" value="${e.stdWeight||''}"/></div>
+    </div>
+    <div class="modal-field" style="margin-top:12px;"><label>Category</label>
+      <select id="be-cat" style="width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--radius);font-size:14px;font-family:'DM Sans',sans-serif;margin-top:4px;">${catOptions}</select>
     </div>
     <div class="btn-row" style="margin-top:14px;">
       <button class="btn btn-primary" onclick="saveBankEdit('${name}')">Save &amp; recalculate</button>
       <button class="btn btn-secondary" onclick="refetchBankEntry('${name}')">Re-fetch USDA</button>
       <button class="btn btn-secondary" onclick="closeModal('bank-edit-modal')">Cancel</button>
     </div>`);
-  window._beUnitType=e.unitType||'weight';
+  window._beUnitType = e.unitType || 'weight';
 }
 
 function beSelectUnit(type,el){
@@ -1974,6 +2421,7 @@ function saveBankEdit(name) {
   e.fat=parseFloat(document.getElementById('be-fat').value)||0;
   e.unitType=window._beUnitType;
   e.stdWeight=e.unitType==='countable'?(parseFloat(document.getElementById('be-stdw').value)||null):null;
+  e.category=document.getElementById('be-cat')?.value||e.category||'Other';
   e.overridden=true;
   persistBank(); closeModal('bank-edit-modal'); renderBank();
   recalcAllRecipesFromBank().then(()=>renderLibrary());
@@ -2058,6 +2506,7 @@ function confirmBankAdd() {
   const key=bankKey(name);
   const stdW=window._baUnitType==='countable'?(parseFloat(document.getElementById('ba-stdw').value)||null):null;
   const stdMatch=Object.entries(STD_WEIGHTS).sort((a,b)=>b[0].length-a[0].length).find(([k])=>key.includes(k));
+  const baCat = assignCategoryRule(name) || 'Other';
   bank[key]={
     name:key,displayName:name,
     usdaMatch:window._baUsdaMatch?.usdaMatch||'',fdcId:window._baUsdaMatch?.fdcId||null,
@@ -2067,8 +2516,10 @@ function confirmBankAdd() {
     fat:parseFloat(document.getElementById('ba-fat').value)||0,
     stdWeight:stdW??(stdMatch?stdMatch[1]:null),
     unitType:window._baUnitType,
+    category:baCat,
     overridden:!window._baUsdaMatch,addedAt:Date.now(),
   };
+  if (baCat==='Other') assignCategoryAI(name).then(aiCat=>{ if(bank[key]){bank[key].category=aiCat;persistBank();renderBank();} });
   persistBank();closeModal('bank-add-modal');renderBank();
 }
 
@@ -2120,6 +2571,8 @@ showPage=function(page){
 };
 
 // ── Init ───────────────────────────────────────────────────────────────────
+// Pre-populate bank with common ingredients on first load
+prePopulateBank();
 renderLibrary();
 (async () => {
   if (recipes.length > 0) {
