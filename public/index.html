@@ -636,8 +636,7 @@ async function recalcMacros(i){
     });
     recipes[i]={...r,cal:macros.cal,protein:macros.protein,carbs:macros.carbs,fat:macros.fat,
       ingredients:newIngs};
-    recalcFromIngredients(i);
-    persist();renderDetail(i);
+        persist();renderDetail(i);
     crossCheckMacros(i);
   }catch(e){
     if(btn){btn.disabled=false;btn.textContent='Try again';}
@@ -682,8 +681,7 @@ async function saveEdit(){
     photo:document.getElementById('e-photo-input')._photoData||recipes[i].photo||'',
     _curSrv:srvInfo.servings};
   // Re-apply ingredient overrides to recipe totals
-  recalcFromIngredients(i);
-  persist();btn.disabled=false;btn.textContent='Save & recalculate macros';statusEl.innerHTML='';
+    persist();btn.disabled=false;btn.textContent='Save & recalculate macros';statusEl.innerHTML='';
   detailIdx=i;showPage('detail');
   if(macros) crossCheckMacros(i);
   populateBankFromIngredients(ings).then(()=>recalcAllRecipesFromBank().then(()=>renderDetail(i)));

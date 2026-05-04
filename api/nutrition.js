@@ -468,7 +468,7 @@ async function findFood(name) {
     const best = pickBest(foods, name);
     if (best) {
       console.log(`findFood: "${name}" → search "${q}": "${best.description}"`);
-      return { food: best, nutrients: extractNutrients(best) };
+      return { food: best, nutrients: extractFromSearchResult(best) };
     }
   }
   return null;
