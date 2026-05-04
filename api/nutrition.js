@@ -527,6 +527,7 @@ export default async function handler(req, res) {
         source: 'usda',
         matchedFood: food.description,
         fdcId: food.fdcId,
+        per100g: { cal: per100g.cal, protein: per100g.protein, carbs: per100g.carbs, fat: per100g.fat },
       };
 
       console.log(`[${item}] grams:${Math.round(grams)} per100g:{cal:${per100g.cal},carbs:${per100g.carbs}} → cal:${row.cal} carbs:${row.carbs}`);

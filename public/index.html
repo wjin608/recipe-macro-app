@@ -1812,29 +1812,62 @@ async function populateBankFromIngredients(ingredients) {
     const k = bankKey(ing.item); if (seen.has(k)||bank[k]) return false; seen.add(k); return true;
   });
   if (!toFetch.length) return;
-  try {
-    const resp = await fetch('/api/nutrition', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ingredients: toFetch.map(i=>({item:i.item,rawAmount:'100g'})), servings:1})
-    });
-    const data = await resp.json();
-    (data.ingredients||[]).forEach(result => {
-      if (!result.matchedFood && !result.cal) return;
-      const key = bankKey(result.item);
-      const scale = 100/(result.grams||100);
-      const stdMatch = Object.entries(STD_WEIGHTS).sort((a,b)=>b[0].length-a[0].length).find(([k])=>key.includes(k));
-      const stdWeight = stdMatch?stdMatch[1]:null;
-      bank[key] = {
-        name:key, displayName:result.item,
-        usdaMatch:result.matchedFood||'', fdcId:result.fdcId||null,
-        cal:(result.cal||0)*scale, protein:(result.protein||0)*scale,
-        carbs:(result.carbs||0)*scale, fat:(result.fat||0)*scale,
-        stdWeight, unitType: stdWeight?'countable':'weight',
-        overridden:false, addedAt:Date.now(),
-      };
-    });
-    persistBank();
-  } catch(e) { console.warn('Bank populate error:',e.message); }
+
+  // Batch in groups of 20 to avoid overloading the API
+  const batchSize = 20;
+  for (let i = 0; i < toFetch.length; i += batchSize) {
+    const batch = toFetch.slice(i, i + batchSize);
+    try {
+      const resp = await fetch('/api/nutrition', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          ingredients: batch.map(ing => ({
+            item: ing.item,
+            rawAmount: ing.rawAmount || ing.amount || '100g'
+          })),
+          servings: 1
+        })
+      });
+      if (!resp.ok) { console.warn('Bank fetch failed:', resp.status); continue; }
+      const data = await resp.json();
+      (data.ingredients||[]).forEach(result => {
+        if (!result.item) return;
+        const key = bankKey(result.item);
+        // Use per100g if available directly, otherwise scale from result
+        let cal, protein, carbs, fat;
+        if (result.per100g && result.per100g.cal != null) {
+          cal = result.per100g.cal;
+          protein = result.per100g.protein;
+          carbs = result.per100g.carbs;
+          fat = result.per100g.fat;
+        } else if (result.cal != null && result.grams > 0) {
+          const scale = 100 / result.grams;
+          cal = (result.cal||0) * scale;
+          protein = (result.protein||0) * scale;
+          carbs = (result.carbs||0) * scale;
+          fat = (result.fat||0) * scale;
+        } else {
+          return; // no usable macros
+        }
+        const stdMatch = Object.entries(STD_WEIGHTS)
+          .sort((a,b) => b[0].length - a[0].length)
+          .find(([k]) => key.includes(k));
+        const stdWeight = stdMatch ? stdMatch[1] : null;
+        bank[key] = {
+          name: key,
+          displayName: result.item,
+          usdaMatch: result.matchedFood || '',
+          fdcId: result.fdcId || null,
+          cal, protein, carbs, fat,
+          stdWeight,
+          unitType: stdWeight ? 'countable' : 'weight',
+          overridden: false,
+          addedAt: Date.now(),
+        };
+      });
+      persistBank();
+    } catch(e) { console.warn('Bank populate error:', e.message); }
+  }
 }
 
 async function recalcAllRecipesFromBank() {
@@ -1870,7 +1903,7 @@ function renderBank() {
   const mergeBtn=document.getElementById('merge-btn');
   if(mergeBtn) mergeBtn.style.display=bankMergeMode?'block':'none';
   if(!filtered.length){
-    document.getElementById('bank-table-wrap').innerHTML='<div class="empty-state"><h2>No ingredients yet</h2><p>Ingredients are added automatically when you save recipes, or click "+ Add ingredient" to add one manually.</p></div>';
+    document.getElementById('bank-table-wrap').innerHTML='<div class="empty-state"><h2>No ingredients yet</h2><p>Ingredients are added automatically when you save recipes. If you have existing recipes, click the button below to pull them in now.</p><button class="btn btn-primary" style="margin-top:12px;" onclick="triggerBankPopulate()">Pull ingredients from recipes</button></div>';
     return;
   }
   const rows=filtered.map(e=>`<tr onclick="${bankMergeMode?`toggleMergeSelect('${e.name}')`:`openBankEdit('${e.name}')`}">
@@ -1885,6 +1918,20 @@ function renderBank() {
   document.getElementById('bank-table-wrap').innerHTML=`<table class="bank-table">
     <thead><tr>${bankMergeMode?'<th></th>':''}<th>Ingredient</th><th class="bank-num">Cal/100g</th><th class="bank-num">Protein</th><th class="bank-num">Carbs</th><th class="bank-num">Fat</th><th>Std weight</th></tr></thead>
     <tbody>${rows}</tbody></table>`;
+}
+
+async function triggerBankPopulate() {
+  if (!recipes.length) { alert('No recipes found. Add some recipes first.'); return; }
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = 'Pulling ingredients…';
+  // Force re-fetch by temporarily clearing bank entries that have no override
+  const keys = Object.keys(bank).filter(k => !bank[k].overridden);
+  keys.forEach(k => delete bank[k]);
+  await recalcAllRecipesFromBank();
+  renderBank();
+  renderLibrary();
+  btn.disabled = false;
+  btn.textContent = 'Pull ingredients from recipes';
 }
 
 function openBankEdit(name) {
@@ -2076,7 +2123,23 @@ showPage=function(page){
 
 // ── Init ───────────────────────────────────────────────────────────────────
 renderLibrary();
-recalcAllRecipesFromBank().then(()=>{renderLibrary();console.log('Bank ready, recipes recalculated');});
+(async () => {
+  if (recipes.length > 0) {
+    const allIngs = [];
+    const seen = new Set();
+    recipes.forEach(r => (r.ingredients||[]).forEach(ing => {
+      const k = bankKey(ing.item);
+      if (ing.item && !bank[k] && !seen.has(k)) { seen.add(k); allIngs.push(ing); }
+    }));
+    if (allIngs.length > 0) {
+      console.log('Populating bank with', allIngs.length, 'ingredients from existing recipes…');
+      await populateBankFromIngredients(allIngs);
+    }
+    await recalcAllRecipesFromBank();
+    renderLibrary();
+    console.log('Bank ready:', Object.keys(bank).length, 'ingredients');
+  }
+})();
 </script>
 </body>
 </html>
