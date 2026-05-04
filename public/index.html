@@ -1749,13 +1749,13 @@ const CATEGORY_ICONS = {
   'Fruits':              '🍎',
   'Grains & Starches':   '🌾',
   'Nuts & Seeds':        '🥜',
-  'Oils & Fats':         '🫙',
+  'Oils & Fats':         '🍶',
   'Sweeteners':          '🍯',
   'Condiments & Sauces': '🧴',
   'Herbs & Spices':      '🌿',
   'Beverages':           '🧃',
   'Baking':              '🧁',
-  'Tofu & Legumes':      '🫘',
+  'Tofu & Legumes':      '🌱',
   'Other':               '📦',
 };
 
@@ -2045,6 +2045,68 @@ const PREPOPULATED_INGREDIENTS = [
   { name:'edamame',            cal:121, protein:11,   carbs:9,    fat:5.2,  stdWeight:null,unitType:'weight',    cat:'Tofu & Legumes',    usdaMatch:'Edamame, frozen, prepared' },
 ];
 
+function fixBankCategories() {
+  // Correct known mis-categorized ingredients in existing bank entries
+  const FORCE_RULES = [
+    { keys: ['salt','pepper','cumin','coriander','turmeric','paprika','cayenne',
+              'cinnamon','nutmeg','clove','cardamom','star anise','bay leaf',
+              'thyme','rosemary','basil','oregano','parsley','cilantro','mint',
+              'sage','tarragon','dill','chive','lemongrass','galangal',
+              'five spice','szechuan','sichuan','garlic powder','onion powder',
+              'curry','garam masala','chili flake','chili powder','allspice',
+              'fennel seed','caraway','mustard seed','kosher','black bean paste',
+              'white pepper'], cat: 'Herbs & Spices' },
+    { keys: ['sugar','honey','maple syrup','molasses','agave','stevia',
+              'brown sugar','powdered sugar','caster sugar','palm sugar',
+              'rock sugar','corn syrup','golden syrup','granulated sugar',
+              'simple syrup'], cat: 'Sweeteners' },
+    { keys: ['vegetable oil','canola oil','corn oil','avocado oil',
+              'sunflower oil','peanut oil','chili oil'], cat: 'Oils & Fats' },
+  ];
+  let fixed = 0;
+  Object.values(bank).forEach(entry => {
+    if (entry.overridden) return; // don't touch manually set categories
+    const n = (entry.name||'').toLowerCase();
+    for (const rule of FORCE_RULES) {
+      if (rule.keys.some(k => n.includes(k))) {
+        if (entry.category !== rule.cat) { entry.category = rule.cat; fixed++; }
+        break;
+      }
+    }
+  });
+  if (fixed > 0) { persistBank(); console.log('Fixed', fixed, 'category assignments'); }
+
+  // Fix known incorrect unit types
+  const VOLUME_INGREDIENTS = ['milk','cream','butter','oil','syrup','honey','broth',
+    'juice','sauce','vinegar','wine','sake','mirin','extract','yogurt'];
+  const COUNTABLE_FIXES = {
+    'egg':50,'egg yolk':17,'egg white':33,'large egg':57,'whole egg':50,
+    'garlic clove':5,'banana':118,'apple':182,'onion':110,'tomato':123,
+    'carrot':61,'potato':213,'orange':131,'lemon':84,'lime':67,'avocado':201,
+    'bell pepper':119,'celery':40,'chicken breast':174,'chicken thigh':130,
+    'ladyfinger':11,'cookie':16,
+  };
+  let unitFixed = 0;
+  Object.values(bank).forEach(entry => {
+    if (entry.overridden) return;
+    const n = entry.name.toLowerCase();
+    // Fix volume items
+    if (entry.unitType === 'weight' && VOLUME_INGREDIENTS.some(v => n.includes(v))) {
+      entry.unitType = 'volume'; unitFixed++;
+    }
+    // Fix countable items that got 'weight'
+    const countMatch = Object.entries(COUNTABLE_FIXES)
+      .sort((a,b) => b[0].length - a[0].length)
+      .find(([k]) => n === k || n.includes(k));
+    if (countMatch && entry.unitType !== 'countable') {
+      entry.unitType = 'countable';
+      if (!entry.stdWeight) entry.stdWeight = countMatch[1];
+      unitFixed++;
+    }
+  });
+  if (unitFixed > 0) { persistBank(); console.log('Fixed', unitFixed, 'unit type assignments'); }
+}
+
 function prePopulateBank() {
   let added = 0;
   PREPOPULATED_INGREDIENTS.forEach(item => {
@@ -2317,6 +2379,7 @@ function renderBank() {
         <td class="bank-num">${e.carbs != null ? parseFloat(e.carbs.toFixed(1)) : '—'}</td>
         <td class="bank-num">${e.fat != null ? parseFloat(e.fat.toFixed(1)) : '—'}</td>
         <td style="font-size:11px;color:var(--text3);">${e.stdWeight ? e.stdWeight + 'g each' : e.unitType || 'weight'}</td>
+        <td><button class="btn-sm danger" onclick="event.stopPropagation();deleteBankEntry('${e.name}')" title="Delete">🗑</button></td>
       </tr>`).join('');
 
     return `<div class="bank-group">
@@ -2336,6 +2399,7 @@ function renderBank() {
             <th class="bank-num">Carbs</th>
             <th class="bank-num">Fat</th>
             <th>Std weight</th>
+            <th></th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
@@ -2402,6 +2466,9 @@ function openBankEdit(name) {
       <button class="btn btn-primary" onclick="saveBankEdit('${name}')">Save &amp; recalculate</button>
       <button class="btn btn-secondary" onclick="refetchBankEntry('${name}')">Re-fetch USDA</button>
       <button class="btn btn-secondary" onclick="closeModal('bank-edit-modal')">Cancel</button>
+    </div>
+    <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">
+      <button class="btn" style="background:none;color:var(--danger);border:1px solid var(--danger);width:100%;" onclick="deleteBankEntry('${name}')">🗑 Delete this ingredient</button>
     </div>`);
   window._beUnitType = e.unitType || 'weight';
 }
@@ -2523,6 +2590,37 @@ function confirmBankAdd() {
   persistBank();closeModal('bank-add-modal');renderBank();
 }
 
+// ── Delete bank entry ─────────────────────────────────────────────────────
+function deleteBankEntry(name) {
+  const e = bank[name];
+  if (!e) return;
+  const displayName = e.displayName || name;
+  const recipesUsing = recipes.filter(r =>
+    (r.ingredients||[]).some(ing => bankKey(ing.item) === name)
+  ).map(r => r.name);
+
+  const warn = recipesUsing.length > 0
+    ? `<p style="color:var(--danger);font-size:13px;margin-bottom:10px;">⚠ Used in ${recipesUsing.length} recipe${recipesUsing.length!==1?'s':''}: ${recipesUsing.slice(0,3).join(', ')}${recipesUsing.length>3?'…':''}</p>`
+    : '';
+
+  closeModal('bank-edit-modal');
+  showModal('bank-delete-modal', `
+    <div class="modal-title">Delete "${displayName}"?</div>
+    ${warn}
+    <p style="font-size:13px;color:var(--text2);margin-bottom:16px;">This will remove it from the ingredient bank. Recipes using it will keep their existing macro values but won't recalculate from the bank until a replacement is added.</p>
+    <div class="btn-row">
+      <button class="btn btn-primary" style="background:var(--danger);border-color:var(--danger);" onclick="confirmDeleteBankEntry('${name}')">Delete</button>
+      <button class="btn btn-secondary" onclick="closeModal('bank-delete-modal')">Cancel</button>
+    </div>`);
+}
+
+function confirmDeleteBankEntry(name) {
+  delete bank[name];
+  persistBank();
+  closeModal('bank-delete-modal');
+  renderBank();
+}
+
 // ── Merge duplicates ───────────────────────────────────────────────────────
 function startMerge() {
   bankMergeMode=!bankMergeMode;
@@ -2573,6 +2671,7 @@ showPage=function(page){
 // ── Init ───────────────────────────────────────────────────────────────────
 // Pre-populate bank with common ingredients on first load
 prePopulateBank();
+fixBankCategories();
 renderLibrary();
 (async () => {
   if (recipes.length > 0) {
