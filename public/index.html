@@ -202,6 +202,21 @@ h1,h2,h3{font-family:'Lora',serif;}
   .macro-strip{grid-template-columns:repeat(2,1fr);}
   .recipe-grid{grid-template-columns:1fr;}
 }
+
+/* ── Ingredient Bank ─────────────────────────────────── */
+.bank-search{width:100%;padding:8px 12px;border:1px solid var(--border2);border-radius:var(--radius);font-size:14px;font-family:'DM Sans',sans-serif;margin-bottom:14px;box-sizing:border-box;}
+.bank-search:focus{outline:none;border-color:var(--accent3);}
+.bank-table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:14px;}
+.bank-table th{background:var(--surface2);padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);border-bottom:1px solid var(--border);}
+.bank-table td{padding:8px 12px;border-bottom:1px solid var(--border2);vertical-align:middle;}
+.bank-table tbody tr:hover td{background:var(--bg);cursor:pointer;}
+.bank-row-name{font-weight:500;}.bank-row-usda{font-size:11px;color:var(--text3);}
+.bank-num{text-align:right;font-variant-numeric:tabular-nums;}
+.ov-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent3);margin-left:5px;vertical-align:middle;}
+.unit-tabs{display:flex;gap:5px;margin-bottom:10px;}
+.unit-tab{padding:4px 10px;border-radius:99px;font-size:12px;cursor:pointer;border:1px solid var(--border2);background:#fff;font-family:'DM Sans',sans-serif;}
+.unit-tab.active{background:var(--text);color:#fff;border-color:var(--text);}
+.merge-sel{width:16px;height:16px;cursor:pointer;}
 </style>
 </head>
 <body>
@@ -243,6 +258,16 @@ h1,h2,h3{font-family:'Lora',serif;}
       <div id="sb-tr" style="display:none;padding:4px 16px 10px;">
         <p style="font-size:12px;color:var(--text2);margin-bottom:8px;">Log what you ate and track vs your goals.</p>
         <button class="add-recipe-btn" onclick="showPage('tracking')" style="width:100%;">Open Tracking</button>
+      </div>
+    </div>
+    <div style="border-bottom:1px solid var(--border);">
+      <div onclick="toggleSb('bk')" style="display:flex;justify-content:space-between;align-items:center;padding:11px 16px;cursor:pointer;user-select:none;">
+        <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text2);">🧪 Ingredient Bank</span>
+        <span id="sb-arr-bk" style="font-size:10px;color:var(--text3);display:inline-block;">▶</span>
+      </div>
+      <div id="sb-bk" style="display:none;padding:4px 16px 10px;">
+        <p style="font-size:12px;color:var(--text2);margin-bottom:8px;">Unified ingredient macros database.</p>
+        <button class="add-recipe-btn" onclick="showPage('bank')" style="width:100%;">Open Bank</button>
       </div>
     </div>
   </nav>
@@ -300,6 +325,18 @@ h1,h2,h3{font-family:'Lora',serif;}
       <div id="tr-day-panel"></div>
     </div>
 
+    <!-- INGREDIENT BANK PAGE -->
+    <div class="page" id="page-bank">
+      <div class="page-header">
+        <div><h1 class="page-title">Ingredient Bank</h1><div class="page-subtitle" id="bank-subtitle"></div></div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="btn btn-secondary" id="merge-btn" onclick="confirmMerge()" style="display:none;">Merge selected</button>
+          <button class="btn btn-primary" onclick="openBankAddModal()">+ Add ingredient</button>
+        </div>
+      </div>
+      <input class="bank-search" id="bank-search" placeholder="Search ingredients…" oninput="renderBank()"/>
+      <div id="bank-table-wrap"></div>
+    </div>
     <!-- ADD / EDIT -->
     <div class="page" id="page-add">
       <div class="form-card">
@@ -583,6 +620,7 @@ async function saveManual(calcMacros){
   const midx=recipes.length-1;
   persist();btn.disabled=false;btn.textContent='Save & calculate macros';showPage('library');
   if(macros) crossCheckMacros(midx);
+  populateBankFromIngredients(ings).then(()=>recalcAllRecipesFromBank().then(()=>renderLibrary()));
 }
 
 async function recalcMacros(i){
@@ -648,6 +686,7 @@ async function saveEdit(){
   persist();btn.disabled=false;btn.textContent='Save & recalculate macros';statusEl.innerHTML='';
   detailIdx=i;showPage('detail');
   if(macros) crossCheckMacros(i);
+  populateBankFromIngredients(ings).then(()=>recalcAllRecipesFromBank().then(()=>renderDetail(i)));
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -755,96 +794,9 @@ async function crossCheckMacros(recipeIdx) {
   } catch(e) { /* cross-check failed silently */ }
 }
 
-// ── Manual macro override (recipe-level + ingredient-level) ──────────────
-function saveOverride(recipeIdx, field, value) {
-  if (!recipes[recipeIdx]._overrides) recipes[recipeIdx]._overrides = {};
-  const v = parseFloat(value);
-  if (!isNaN(v) && v >= 0) {
-    recipes[recipeIdx]._overrides[field] = v;
-  } else {
-    delete recipes[recipeIdx]._overrides[field];
-  }
-  persist();
-  renderDetail(recipeIdx);
-}
-
-function saveIngOverride(recipeIdx, ingIdx, field, value) {
-  const r = recipes[recipeIdx];
-  if (!r.ingredients[ingIdx]._overrides) r.ingredients[ingIdx]._overrides = {};
-  const v = parseFloat(value);
-  if (!isNaN(v) && v >= 0) {
-    r.ingredients[ingIdx]._overrides[field] = v;
-  } else {
-    delete r.ingredients[ingIdx]._overrides[field];
-  }
-  recalcFromIngredients(recipeIdx);
-  persist();
-  renderDetail(recipeIdx);
-}
-
-function saveIngOverridePanel(recipeIdx, ingIdx) {
-  const r = recipes[recipeIdx];
-  if (!r.ingredients[ingIdx]._overrides) r.ingredients[ingIdx]._overrides = {};
-  const fields = ['cal','pro','carb','fat'];
-  const keys = ['cal','protein','carbs','fat'];
-  fields.forEach((f, idx) => {
-    const el = document.getElementById('ov-'+f+'-'+recipeIdx+'-'+ingIdx);
-    if (!el) return;
-    const v = parseFloat(el.value);
-    if (!isNaN(v) && v >= 0) {
-      r.ingredients[ingIdx]._overrides[keys[idx]] = v;
-    } else if (el.value === '') {
-      delete r.ingredients[ingIdx]._overrides[keys[idx]];
-    }
-  });
-  recalcFromIngredients(recipeIdx);
-  persist();
-  renderDetail(recipeIdx);
-}
-
-function recalcFromIngredients(recipeIdx) {
-  const r = recipes[recipeIdx];
-  let totCal = 0, totPro = 0, totCarb = 0, totFat = 0;
-  let anyMacros = false;
-  r.ingredients.forEach(ing => {
-    const cal = (ing._overrides && ing._overrides.cal != null) ? ing._overrides.cal : (ing.cal || 0);
-    const pro = (ing._overrides && ing._overrides.protein != null) ? ing._overrides.protein : (ing.protein || 0);
-    const carb = (ing._overrides && ing._overrides.carbs != null) ? ing._overrides.carbs : (ing.carbs || 0);
-    const fat = (ing._overrides && ing._overrides.fat != null) ? ing._overrides.fat : (ing.fat || 0);
-    if (ing.cal != null || (ing._overrides && Object.keys(ing._overrides).length)) anyMacros = true;
-    totCal += cal; totPro += pro; totCarb += carb; totFat += fat;
-  });
-  if (anyMacros) {
-    const srv = r.servings || 1;
-    // Only update if not recipe-level overridden
-    if (!r._overrides || r._overrides.cal == null) r.cal = Math.round(totCal / srv);
-    if (!r._overrides || r._overrides.protein == null) r.protein = parseFloat((totPro / srv).toFixed(1));
-    if (!r._overrides || r._overrides.carbs == null) r.carbs = parseFloat((totCarb / srv).toFixed(1));
-    if (!r._overrides || r._overrides.fat == null) r.fat = parseFloat((totFat / srv).toFixed(1));
-  }
-}
-
-function clearOverrides(recipeIdx) {
-  delete recipes[recipeIdx]._overrides;
-  persist();
-  renderDetail(recipeIdx);
-}
-
-function clearIngOverride(recipeIdx, ingIdx) {
-  delete recipes[recipeIdx].ingredients[ingIdx]._overrides;
-  recalcFromIngredients(recipeIdx);
-  persist();
-  renderDetail(recipeIdx);
-}
-
-function getDisplayMacro(r, field) {
-  const ov = r._overrides && r._overrides[field] != null ? r._overrides[field] : r[field];
-  return ov != null ? ov : null;
-}
-
-function getIngDisplayMacro(ing, field) {
-  return (ing._overrides && ing._overrides[field] != null) ? ing._overrides[field] : (ing[field] != null ? ing[field] : null);
-}
+// ── Macro display helpers (bank is source of truth) ──────────────────────
+function getDisplayMacro(r, field) { return r[field] ?? null; }
+function getIngDisplayMacro(ing, field) { return ing[field] ?? null; }
 
 // ── Photo helpers ────────────────────────────────────────────────────────
 function handlePhotoUpload(evt, prefix) {
@@ -948,59 +900,18 @@ function renderDetail(i){
   const [bg,color]=r.category?catColor(r.category):['transparent','inherit'];
   const catBadge=r.category?`<span style="background:${bg};color:${color};font-size:11px;padding:2px 7px;border-radius:99px;margin-left:5px;">${r.category}</span>`:'';
   const srcNote=r.source==='url'&&r.sourceUrl?`<div style="font-size:12px;color:#6b6560;margin-bottom:14px;">Imported from <a href="${r.sourceUrl}" target="_blank" style="color:#2c5f8a;">${new URL(r.sourceUrl).hostname}</a></div>`:'';
-  const dCal=getDisplayMacro(r,'cal'), dPro=getDisplayMacro(r,'protein'), dCarb=getDisplayMacro(r,'carbs'), dFat=getDisplayMacro(r,'fat');
-  const hasOv=r._overrides&&Object.keys(r._overrides).length>0;
-  const warnHtml=r._macroWarning?`<div class="macro-warning"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Please double check the macros — AI estimate differs significantly. <small style="opacity:0.7">(${r._macroWarning})</small></div>`:'';
-  const overrideHtml=`<div style="margin-top:6px;">
-    <button class="override-toggle" onclick="document.getElementById('override-panel-${i}').style.display=document.getElementById('override-panel-${i}').style.display==='none'?'block':'none'">
-      ${hasOv?'✏ Macros overridden <span class=\"override-badge\">custom</span>':'✏ Override macros manually'}
-    </button>
-    <div id="override-panel-${i}" style="display:${hasOv?'block':'none'}">
-      <div class="override-row">
-        <div class="override-field"><label>Calories</label><input type="number" min="0" placeholder="${dCal!=null?Math.round(dCal*factor):''}" value="${r._overrides&&r._overrides.cal!=null?r._overrides.cal:''}" onchange="saveOverride(${i},'cal',this.value)"/></div>
-        <div class="override-field"><label>Protein (g)</label><input type="number" min="0" step="0.1" placeholder="${dPro!=null?parseFloat((dPro*factor).toFixed(1)):''}" value="${r._overrides&&r._overrides.protein!=null?r._overrides.protein:''}" onchange="saveOverride(${i},'protein',this.value)"/></div>
-        <div class="override-field"><label>Carbs (g)</label><input type="number" min="0" step="0.1" placeholder="${dCarb!=null?parseFloat((dCarb*factor).toFixed(1)):''}" value="${r._overrides&&r._overrides.carbs!=null?r._overrides.carbs:''}" onchange="saveOverride(${i},'carbs',this.value)"/></div>
-        <div class="override-field"><label>Fat (g)</label><input type="number" min="0" step="0.1" placeholder="${dFat!=null?parseFloat((dFat*factor).toFixed(1)):''}" value="${r._overrides&&r._overrides.fat!=null?r._overrides.fat:''}" onchange="saveOverride(${i},'fat',this.value)"/></div>
-      </div>
-      ${hasOv?`<button class="override-toggle" style="color:var(--danger);margin-top:4px;" onclick="clearOverrides(${i})">✕ Clear overrides</button>`:''}
-      <p style="font-size:11px;color:var(--text3);margin-top:4px;">Per serving values. Leave blank to use calculated value.</p>
-    </div>
-  </div>`;
+  const dCal=r.cal, dPro=r.protein, dCarb=r.carbs, dFat=r.fat;
+  const warnHtml=r._macroWarning?`<div style="font-size:12px;color:#92620a;background:#fef3e2;border:1px solid #f0d090;border-radius:6px;padding:6px 10px;margin-top:8px;">⚠ AI estimate differs — check macros in Ingredient Bank. (${r._macroWarning})</div>`:'';
   const macroSection=hasMacros(r)
-    ?`<div class="macro-strip"><div class="macro-tile"><span class="macro-tile-val cal" id="d-cal">${dCal!=null?Math.round(dCal*factor):'—'}</span><div class="macro-tile-unit">kcal</div><div class="macro-tile-label">Calories${hasOv&&r._overrides&&r._overrides.cal!=null?' <span class=\"override-badge\">custom</span>':''}</div></div><div class="macro-tile"><span class="macro-tile-val pro" id="d-pro">${dPro!=null?Math.round(dPro*factor):'—'}</span><div class="macro-tile-unit">g</div><div class="macro-tile-label">Protein${hasOv&&r._overrides&&r._overrides.protein!=null?' <span class=\"override-badge\">custom</span>':''}</div></div><div class="macro-tile"><span class="macro-tile-val" id="d-carb">${dCarb!=null?Math.round(dCarb*factor):'—'}</span><div class="macro-tile-unit">g</div><div class="macro-tile-label">Carbs${hasOv&&r._overrides&&r._overrides.carbs!=null?' <span class=\"override-badge\">custom</span>':''}</div></div><div class="macro-tile"><span class="macro-tile-val" id="d-fat">${dFat!=null?Math.round(dFat*factor):'—'}</span><div class="macro-tile-unit">g</div><div class="macro-tile-label">Fat${hasOv&&r._overrides&&r._overrides.fat!=null?' <span class=\"override-badge\">custom</span>':''}</div></div></div>${warnHtml}${overrideHtml}`
-    :`<div class="recalc-box"><p>Macros not yet calculated for this recipe.</p><button class="btn btn-primary" id="recalc-btn" onclick="recalcMacros(${i})">Calculate macros now</button></div>`;
-  const ings=r.ingredients.map((ing,ingIdx)=>{
+    ?`<div class="macro-strip"><div class="macro-tile"><span class="macro-tile-val cal">${dCal!=null?Math.round(dCal*factor):'—'}</span><div class="macro-tile-unit">kcal</div><div class="macro-tile-label">Calories</div></div><div class="macro-tile"><span class="macro-tile-val pro">${dPro!=null?Math.round(dPro*factor):'—'}</span><div class="macro-tile-unit">g</div><div class="macro-tile-label">Protein</div></div><div class="macro-tile"><span class="macro-tile-val">${dCarb!=null?Math.round(dCarb*factor):'—'}</span><div class="macro-tile-unit">g</div><div class="macro-tile-label">Carbs</div></div><div class="macro-tile"><span class="macro-tile-val">${dFat!=null?Math.round(dFat*factor):'—'}</span><div class="macro-tile-unit">g</div><div class="macro-tile-label">Fat</div></div></div>${warnHtml}`
+    :"<div class=\"recalc-box\"><p>Macros not yet calculated.</p><button class=\"btn btn-primary\" onclick=\"recalcMacros("+i+")\" >Calculate macros now</button></div>";
+  const ings=r.ingredients.map((ing)=>{
     const scaledAmt=ing.rawAmount?scaleAmount(ing.rawAmount,factor):'';
-    const hasMac=ing.cal!=null||(ing._overrides&&Object.keys(ing._overrides).length>0);
-    const dCal=getIngDisplayMacro(ing,'cal'), dPro=getIngDisplayMacro(ing,'protein'), dCarb=getIngDisplayMacro(ing,'carbs'), dFat=getIngDisplayMacro(ing,'fat');
-    const hasIngOv=ing._overrides&&Object.keys(ing._overrides).length>0;
-    const ovBadge=hasIngOv?'<span class="override-badge">custom</span>':'';
-    const macLine=hasMac?`<div class="ing-detail-mac">${dCal!=null?Math.round(dCal*factor):0} kcal · P${dPro!=null?parseFloat((dPro*factor).toFixed(1)):0}g · C${dCarb!=null?parseFloat((dCarb*factor).toFixed(1)):0}g · F${dFat!=null?parseFloat((dFat*factor).toFixed(1)):0}g ${ovBadge}</div>`:'';
-    const ovPanel=`<div id="ing-ov-${i}-${ingIdx}" style="display:none;margin-top:6px;">
-      <div class="override-row">
-        <div class="override-field"><label>Cal</label><input type="number" min="0" id="ov-cal-${i}-${ingIdx}" placeholder="${dCal!=null?Math.round(dCal):''}" value="${ing._overrides&&ing._overrides.cal!=null?ing._overrides.cal:''}"/></div>
-        <div class="override-field"><label>Protein g</label><input type="number" min="0" step="0.1" id="ov-pro-${i}-${ingIdx}" placeholder="${dPro!=null?parseFloat(dPro.toFixed(1)):''}" value="${ing._overrides&&ing._overrides.protein!=null?ing._overrides.protein:''}"/></div>
-        <div class="override-field"><label>Carbs g</label><input type="number" min="0" step="0.1" id="ov-carb-${i}-${ingIdx}" placeholder="${dCarb!=null?parseFloat(dCarb.toFixed(1)):''}" value="${ing._overrides&&ing._overrides.carbs!=null?ing._overrides.carbs:''}"/></div>
-        <div class="override-field"><label>Fat g</label><input type="number" min="0" step="0.1" id="ov-fat-${i}-${ingIdx}" placeholder="${dFat!=null?parseFloat(dFat.toFixed(1)):''}" value="${ing._overrides&&ing._overrides.fat!=null?ing._overrides.fat:''}"/></div>
-      </div>
-      <div class="override-save-row">
-        <button class="btn btn-primary" style="padding:5px 14px;font-size:12px;" onclick="saveIngOverridePanel(${i},${ingIdx})">Save</button>
-        <button class="btn btn-secondary" style="padding:5px 14px;font-size:12px;" onclick="document.getElementById('ing-ov-${i}-${ingIdx}').style.display='none'">Cancel</button>
-        ${hasIngOv?`<button class="override-toggle" style="color:var(--danger);margin:0;" onclick="clearIngOverride(${i},${ingIdx})">✕ Clear override</button>`:''}
-      </div>
-      <p style="font-size:11px;color:var(--text3);margin-top:4px;">Values are per total ingredient amount. Recipe totals update automatically.</p>
-    </div>`;
-    return `<div class="ing-detail-row" style="flex-direction:column;align-items:stretch;">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <span>${ing.item}</span>
-        <div class="ing-detail-right">
-          <div class="ing-detail-amt">${scaledAmt}</div>
-          ${macLine}
-          <button class="override-toggle" style="text-align:right;" onclick="var p=document.getElementById('ing-ov-${i}-${ingIdx}');p.style.display=p.style.display==='none'?'block':'none'">${hasIngOv?'✏ overridden':'✏ override'}</button>
-        </div>
-      </div>
-      ${ovPanel}
-    </div>`;
+    const hasMac=ing.cal!=null;
+    const bEntry=bank?.[bankKey(ing.item)];
+    const bankBadge=bEntry?`<span style="font-size:10px;color:var(--text3);margin-left:3px;" title="${bEntry.usdaMatch||'bank'}">🧪</span>`:'';
+    const macLine=hasMac?`<div class="ing-detail-mac">${Math.round((ing.cal||0)*factor)} kcal · P${parseFloat(((ing.protein||0)*factor).toFixed(1))}g · C${parseFloat(((ing.carbs||0)*factor).toFixed(1))}g · F${parseFloat(((ing.fat||0)*factor).toFixed(1))}g</div>`:'';
+    return `<div class="ing-detail-row"><span>${ing.item}${bankBadge}</span><div class="ing-detail-right"><div class="ing-detail-amt">${scaledAmt}</div>${macLine}</div></div>`;
   }).join('');
   const steps=r.steps&&r.steps.length?`<div class="detail-section">Instructions</div><ol class="steps-list">${r.steps.map((s,j)=>`<li><div class="step-num">${j+1}</div><span>${s}</span></li>`).join('')}</ol>`:'';
   const notesSection=r.notes?`<div class="detail-section">Notes</div><div class="detail-notes">${r.notes}</div>`:'';
@@ -1796,8 +1707,376 @@ showPage = function(page) {
   if (page==='tracking') renderTracking();
 };
 
+
+// ══════════════════════════════════════════════════════════════════════════
+// INGREDIENT BANK
+// ══════════════════════════════════════════════════════════════════════════
+const BANK_KEY = 'rma_bank_v1';
+let bank = JSON.parse(localStorage.getItem(BANK_KEY) || '{}');
+function persistBank() { localStorage.setItem(BANK_KEY, JSON.stringify(bank)); }
+function bankKey(name) { return (name||'').toLowerCase().trim(); }
+
+const STD_WEIGHTS = {
+  egg:50,eggs:50,'whole egg':50,'large egg':57,'medium egg':44,'small egg':38,
+  'egg yolk':17,'egg yolks':17,'egg white':33,'egg whites':33,
+  'chicken breast':174,'chicken thigh':130,'chicken drumstick':110,
+  banana:118,apple:182,orange:131,lemon:84,lime:67,tomato:123,
+  onion:110,shallot:30,potato:213,carrot:61,
+  clove:5,cloves:5,'garlic clove':5,'garlic cloves':5,
+  'bay leaf':0.6,'bay leaves':0.6,
+  'ladyfinger':11,'ladyfingers':11,'savoiardi':11,
+  cookie:16,biscuit:16,cracker:7,
+  stalk:40,sprig:2,strip:15,slice:28,piece:50,
+  'sundried tomato':5,'sun-dried tomato':5,
+};
+
+const FE_TO_GRAMS = {
+  g:1,gram:1,grams:1,kg:1000,oz:28.3495,ounces:28.3495,lb:453.592,lbs:453.592,
+  cup:240,cups:240,tbsp:14.787,tablespoon:14.787,tablespoons:14.787,
+  tsp:4.929,teaspoon:4.929,teaspoons:4.929,ml:1,l:1000,pinch:0.36,
+};
+const FE_DRY_CUP = {
+  flour:125,'all-purpose flour':125,'bread flour':127,'whole wheat flour':120,
+  oatmeal:90,oats:90,'rolled oats':90,sugar:200,'white sugar':200,'brown sugar':220,
+  'powdered sugar':120,'cocoa powder':85,breadcrumbs:108,rice:185,quinoa:170,
+  cornstarch:128,'peanut butter':258,almond:143,almonds:143,walnut:117,walnuts:117,
+  'chia seed':160,'chia seeds':160,
+};
+const FE_LIQUID = {
+  milk:1.03,cream:1.01,'heavy cream':1.01,'sour cream':0.96,yogurt:1.04,
+  oil:0.92,'olive oil':0.92,'coconut oil':0.92,butter:0.91,
+  honey:1.42,'maple syrup':1.32,water:1.0,broth:1.0,'soy sauce':1.18,
+  'coconut milk':1.02,'tomato paste':1.07,
+};
+const FE_COUNTABLE = new Set(['piece','pieces','slice','slices','whole','clove','cloves',
+  'sprig','sprigs','stalk','stalks','strip','strips','cookie','cookies',
+  'biscuit','biscuits','cracker','crackers','sheet','sheets']);
+
+function parseAmountFE(rawAmount, itemName, bankEntry) {
+  if (!rawAmount) return 100;
+  let s = (rawAmount||'').trim().toLowerCase()
+    .replace(/½/g,'0.5').replace(/¼/g,'0.25').replace(/¾/g,'0.75')
+    .replace(/⅓/g,'0.333').replace(/⅔/g,'0.667');
+  const name = (itemName||'').toLowerCase();
+  let qty=1, unit='', m;
+  if ((m=s.match(/^(\d+)\s+(\d+)\/(\d+)\s*(.*)/))) { qty=+m[1]+(+m[2]/+m[3]); unit=m[4].trim().split(/\s/)[0]; }
+  else if ((m=s.match(/^(\d+)\/(\d+)\s*(.*)/))) { qty=+m[1]/+m[2]; unit=m[3].trim().split(/\s/)[0]; }
+  else if ((m=s.match(/^([\d.]+)\s*[-–]\s*([\d.]+)\s*(.*)/))) { qty=(+m[1]+(+m[2]))/2; unit=m[3].trim().split(/\s/)[0]; }
+  else if ((m=s.match(/^([\d.]+)\s*(.*)/))) { qty=+m[1]; unit=m[2].trim().split(/\s/)[0].replace(/[.,]$/,''); }
+  const u = unit.toLowerCase().replace(/[.,]$/,'');
+  const f = FE_TO_GRAMS[u] ?? FE_TO_GRAMS[u.replace(/s$/,'')];
+  if (f != null) {
+    let grams = qty * f;
+    const volUnits = new Set(['cup','cups','tbsp','tablespoon','tablespoons','tsp','teaspoon','teaspoons']);
+    if (volUnits.has(u)) {
+      const dryMatch = Object.entries(FE_DRY_CUP).find(([dry]) => name.includes(dry)||dry===name);
+      if (dryMatch) {
+        const gpc = dryMatch[1];
+        if (u.startsWith('cup')) return qty*gpc;
+        if (u.startsWith('tbsp')||u==='tablespoon'||u==='tablespoons') return qty*(gpc/16);
+        if (u.startsWith('tsp')||u==='teaspoon'||u==='teaspoons') return qty*(gpc/48);
+      }
+      for (const [liq,den] of Object.entries(FE_LIQUID)) { if (name.includes(liq)) { grams *= den; break; } }
+    }
+    return grams;
+  }
+  if (FE_COUNTABLE.has(u) || u==='') {
+    let stdW = bankEntry?.stdWeight;
+    if (!stdW) {
+      const match = Object.entries(STD_WEIGHTS).sort((a,b)=>b[0].length-a[0].length).find(([k])=>name.includes(k));
+      stdW = match ? match[1] : 50;
+    }
+    return qty * stdW;
+  }
+  return 100;
+}
+
+function calcIngMacrosFromBank(ing) {
+  const key = bankKey(ing.item);
+  const entry = bank[key];
+  if (!entry || entry.cal==null) return {cal:null,protein:null,carbs:null,fat:null};
+  const grams = parseAmountFE(ing.rawAmount||ing.amount||'', ing.item, entry);
+  if (!grams || grams<=0) return {cal:null,protein:null,carbs:null,fat:null};
+  const scale = grams/100;
+  return {
+    cal: Math.round(entry.cal*scale),
+    protein: parseFloat((entry.protein*scale).toFixed(1)),
+    carbs: parseFloat((entry.carbs*scale).toFixed(1)),
+    fat: parseFloat((entry.fat*scale).toFixed(1)),
+  };
+}
+
+async function populateBankFromIngredients(ingredients) {
+  const seen = new Set();
+  const toFetch = ingredients.filter(ing => {
+    const k = bankKey(ing.item); if (seen.has(k)||bank[k]) return false; seen.add(k); return true;
+  });
+  if (!toFetch.length) return;
+  try {
+    const resp = await fetch('/api/nutrition', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ingredients: toFetch.map(i=>({item:i.item,rawAmount:'100g'})), servings:1})
+    });
+    const data = await resp.json();
+    (data.ingredients||[]).forEach(result => {
+      if (!result.matchedFood && !result.cal) return;
+      const key = bankKey(result.item);
+      const scale = 100/(result.grams||100);
+      const stdMatch = Object.entries(STD_WEIGHTS).sort((a,b)=>b[0].length-a[0].length).find(([k])=>key.includes(k));
+      const stdWeight = stdMatch?stdMatch[1]:null;
+      bank[key] = {
+        name:key, displayName:result.item,
+        usdaMatch:result.matchedFood||'', fdcId:result.fdcId||null,
+        cal:(result.cal||0)*scale, protein:(result.protein||0)*scale,
+        carbs:(result.carbs||0)*scale, fat:(result.fat||0)*scale,
+        stdWeight, unitType: stdWeight?'countable':'weight',
+        overridden:false, addedAt:Date.now(),
+      };
+    });
+    persistBank();
+  } catch(e) { console.warn('Bank populate error:',e.message); }
+}
+
+async function recalcAllRecipesFromBank() {
+  const allIngs = [];
+  recipes.forEach(r => (r.ingredients||[]).forEach(ing => { if(ing.item&&!bank[bankKey(ing.item)]) allIngs.push(ing); }));
+  if (allIngs.length) await populateBankFromIngredients(allIngs);
+  let changed = false;
+  recipes.forEach((r,idx) => {
+    const newIngs = (r.ingredients||[]).map(ing => ({...ing,...calcIngMacrosFromBank(ing)}));
+    const srv = r.servings||1;
+    let totCal=0,totPro=0,totCarb=0,totFat=0,anyMacros=false;
+    newIngs.forEach(ing => { if(ing.cal!=null){totCal+=ing.cal;totPro+=(ing.protein||0);totCarb+=(ing.carbs||0);totFat+=(ing.fat||0);anyMacros=true;} });
+    if (anyMacros) {
+      recipes[idx]={...r,ingredients:newIngs,
+        cal:Math.round(totCal/srv),protein:parseFloat((totPro/srv).toFixed(1)),
+        carbs:parseFloat((totCarb/srv).toFixed(1)),fat:parseFloat((totFat/srv).toFixed(1))};
+      changed=true;
+    }
+  });
+  if (changed) persist();
+}
+
+// ── Render Bank ────────────────────────────────────────────────────────────
+let bankMergeMode=false, bankMergeSelected=new Set();
+
+function renderBank() {
+  const entries=Object.values(bank);
+  const q=(document.getElementById('bank-search')?.value||'').toLowerCase();
+  const filtered=q?entries.filter(e=>e.name.includes(q)||(e.usdaMatch||'').toLowerCase().includes(q)):entries;
+  filtered.sort((a,b)=>a.name.localeCompare(b.name));
+  const sub=document.getElementById('bank-subtitle');
+  if(sub) sub.textContent=entries.length+' ingredient'+(entries.length!==1?'s':'')+' · '+entries.filter(e=>e.overridden).length+' overridden';
+  const mergeBtn=document.getElementById('merge-btn');
+  if(mergeBtn) mergeBtn.style.display=bankMergeMode?'block':'none';
+  if(!filtered.length){
+    document.getElementById('bank-table-wrap').innerHTML='<div class="empty-state"><h2>No ingredients yet</h2><p>Ingredients are added automatically when you save recipes, or click "+ Add ingredient" to add one manually.</p></div>';
+    return;
+  }
+  const rows=filtered.map(e=>`<tr onclick="${bankMergeMode?`toggleMergeSelect('${e.name}')`:`openBankEdit('${e.name}')`}">
+    ${bankMergeMode?`<td><input type="checkbox" class="merge-sel" ${bankMergeSelected.has(e.name)?'checked':''} onclick="event.stopPropagation();toggleMergeSelect('${e.name}')"/></td>`:''}
+    <td><div class="bank-row-name">${e.displayName||e.name}${e.overridden?'<span class="ov-dot" title="Overridden"></span>':''}</div><div class="bank-row-usda">${e.usdaMatch||'No USDA match'}</div></td>
+    <td class="bank-num">${e.cal!=null?Math.round(e.cal):'—'}</td>
+    <td class="bank-num">${e.protein!=null?parseFloat(e.protein.toFixed(1)):'—'}</td>
+    <td class="bank-num">${e.carbs!=null?parseFloat(e.carbs.toFixed(1)):'—'}</td>
+    <td class="bank-num">${e.fat!=null?parseFloat(e.fat.toFixed(1)):'—'}</td>
+    <td style="font-size:11px;color:var(--text3);">${e.stdWeight?e.stdWeight+'g each':e.unitType||'weight'}</td>
+  </tr>`).join('');
+  document.getElementById('bank-table-wrap').innerHTML=`<table class="bank-table">
+    <thead><tr>${bankMergeMode?'<th></th>':''}<th>Ingredient</th><th class="bank-num">Cal/100g</th><th class="bank-num">Protein</th><th class="bank-num">Carbs</th><th class="bank-num">Fat</th><th>Std weight</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+
+function openBankEdit(name) {
+  const e=bank[name]; if(!e) return;
+  showModal('bank-edit-modal',`
+    <div class="modal-title">Edit: ${e.displayName||e.name}</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">USDA match: <strong>${e.usdaMatch||'None'}</strong></div>
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);margin-bottom:8px;">Macros per 100g</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+      <div class="modal-field"><label>Calories</label><input type="number" id="be-cal" min="0" value="${e.cal!=null?parseFloat(e.cal.toFixed(1)):''}"/></div>
+      <div class="modal-field"><label>Protein (g)</label><input type="number" id="be-pro" min="0" step="0.1" value="${e.protein!=null?parseFloat(e.protein.toFixed(1)):''}"/></div>
+      <div class="modal-field"><label>Carbs (g)</label><input type="number" id="be-carb" min="0" step="0.1" value="${e.carbs!=null?parseFloat(e.carbs.toFixed(1)):''}"/></div>
+      <div class="modal-field"><label>Fat (g)</label><input type="number" id="be-fat" min="0" step="0.1" value="${e.fat!=null?parseFloat(e.fat.toFixed(1)):''}"/></div>
+    </div>
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);margin-bottom:8px;">Unit type</div>
+    <div class="unit-tabs" id="be-unit-tabs">
+      ${['weight','volume','countable'].map(t=>`<div class="unit-tab${(e.unitType||'weight')===t?' active':''}" onclick="beSelectUnit('${t}',this)">${t}</div>`).join('')}
+    </div>
+    <div id="be-stdw-row" style="${e.unitType==='countable'?'':'display:none;'}margin-top:6px;">
+      <div class="modal-field"><label>Standard weight (g each)${e.stdWeight?' — pre-filled from built-in table':' — not in built-in table'}</label><input type="number" id="be-stdw" min="0" step="0.1" value="${e.stdWeight||''}"/></div>
+    </div>
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn btn-primary" onclick="saveBankEdit('${name}')">Save &amp; recalculate</button>
+      <button class="btn btn-secondary" onclick="refetchBankEntry('${name}')">Re-fetch USDA</button>
+      <button class="btn btn-secondary" onclick="closeModal('bank-edit-modal')">Cancel</button>
+    </div>`);
+  window._beUnitType=e.unitType||'weight';
+}
+
+function beSelectUnit(type,el){
+  window._beUnitType=type;
+  document.querySelectorAll('#be-unit-tabs .unit-tab').forEach(e=>e.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('be-stdw-row').style.display=type==='countable'?'block':'none';
+}
+
+function saveBankEdit(name) {
+  const e=bank[name]; if(!e) return;
+  e.cal=parseFloat(document.getElementById('be-cal').value)||0;
+  e.protein=parseFloat(document.getElementById('be-pro').value)||0;
+  e.carbs=parseFloat(document.getElementById('be-carb').value)||0;
+  e.fat=parseFloat(document.getElementById('be-fat').value)||0;
+  e.unitType=window._beUnitType;
+  e.stdWeight=e.unitType==='countable'?(parseFloat(document.getElementById('be-stdw').value)||null):null;
+  e.overridden=true;
+  persistBank(); closeModal('bank-edit-modal'); renderBank();
+  recalcAllRecipesFromBank().then(()=>renderLibrary());
+}
+
+async function refetchBankEntry(name) {
+  const e=bank[name]; if(!e) return;
+  closeModal('bank-edit-modal');
+  try {
+    const resp=await fetch('/api/nutrition',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ingredients:[{item:e.displayName||name,rawAmount:'100g'}],servings:1})});
+    const data=await resp.json();
+    const r=data.ingredients?.[0];
+    if(!r||!r.matchedFood){alert('Not found in USDA. Try editing manually.');return;}
+    const scale=100/(r.grams||100);
+    e.cal=(r.cal||0)*scale;e.protein=(r.protein||0)*scale;e.carbs=(r.carbs||0)*scale;e.fat=(r.fat||0)*scale;
+    e.usdaMatch=r.matchedFood||e.usdaMatch;e.fdcId=r.fdcId||e.fdcId;e.overridden=false;
+    persistBank();renderBank();recalcAllRecipesFromBank().then(()=>renderLibrary());
+  } catch(err){alert('Re-fetch failed: '+err.message);}
+}
+
+function openBankAddModal() {
+  window._baUnitType='weight'; window._baUsdaMatch=null;
+  showModal('bank-add-modal',`
+    <div class="modal-title">Add ingredient to bank</div>
+    <div class="modal-field"><label>Ingredient name</label><input id="ba-name" placeholder="e.g. protein powder"/></div>
+    <button class="btn btn-secondary" style="margin-bottom:12px;" onclick="bankSearchUSDA()">Search USDA</button>
+    <div id="ba-usda-result" style="margin-bottom:12px;min-height:24px;"></div>
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);margin-bottom:8px;">Macros per 100g</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+      <div class="modal-field"><label>Calories</label><input type="number" id="ba-cal" min="0"/></div>
+      <div class="modal-field"><label>Protein (g)</label><input type="number" id="ba-pro" min="0" step="0.1"/></div>
+      <div class="modal-field"><label>Carbs (g)</label><input type="number" id="ba-carb" min="0" step="0.1"/></div>
+      <div class="modal-field"><label>Fat (g)</label><input type="number" id="ba-fat" min="0" step="0.1"/></div>
+    </div>
+    <div class="unit-tabs" id="ba-unit-tabs">
+      ${['weight','volume','countable'].map((t,i)=>`<div class="unit-tab${i===0?' active':''}" onclick="baSelectUnit('${t}',this)">${t}</div>`).join('')}
+    </div>
+    <div id="ba-stdw-row" style="display:none;margin-top:6px;">
+      <div class="modal-field"><label>Standard weight (g each)</label><input type="number" id="ba-stdw" min="0" step="0.1"/></div>
+    </div>
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn btn-primary" onclick="confirmBankAdd()">Add to bank</button>
+      <button class="btn btn-secondary" onclick="closeModal('bank-add-modal')">Cancel</button>
+    </div>`);
+}
+
+function baSelectUnit(type,el){
+  window._baUnitType=type;
+  document.querySelectorAll('#ba-unit-tabs .unit-tab').forEach(e=>e.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('ba-stdw-row').style.display=type==='countable'?'block':'none';
+}
+
+async function bankSearchUSDA() {
+  const name=document.getElementById('ba-name').value.trim();
+  if(!name){alert('Enter a name first.');return;}
+  const res=document.getElementById('ba-usda-result');
+  res.innerHTML='<span style="font-size:13px;color:var(--text2);">Searching…</span>';
+  try {
+    const resp=await fetch('/api/nutrition',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ingredients:[{item:name,rawAmount:'100g'}],servings:1})});
+    const data=await resp.json();
+    const r=data.ingredients?.[0];
+    if(!r||!r.matchedFood){res.innerHTML='<span style="font-size:13px;color:var(--danger);">Not found. Enter macros manually.</span>';return;}
+    const scale=100/(r.grams||100);
+    window._baUsdaMatch={usdaMatch:r.matchedFood,fdcId:r.fdcId,cal:(r.cal||0)*scale,protein:(r.protein||0)*scale,carbs:(r.carbs||0)*scale,fat:(r.fat||0)*scale};
+    document.getElementById('ba-cal').value=parseFloat(((r.cal||0)*scale).toFixed(1));
+    document.getElementById('ba-pro').value=parseFloat(((r.protein||0)*scale).toFixed(1));
+    document.getElementById('ba-carb').value=parseFloat(((r.carbs||0)*scale).toFixed(1));
+    document.getElementById('ba-fat').value=parseFloat(((r.fat||0)*scale).toFixed(1));
+    const nLow=name.toLowerCase();
+    const stdM=Object.entries(STD_WEIGHTS).sort((a,b)=>b[0].length-a[0].length).find(([k])=>nLow.includes(k));
+    if(stdM){document.getElementById('ba-stdw').value=stdM[1];baSelectUnit('countable',document.querySelectorAll('#ba-unit-tabs .unit-tab')[2]);}
+    res.innerHTML=`<div style="font-size:12px;padding:6px 10px;background:var(--surface2);border-radius:var(--radius);">✓ Found: <strong>${r.matchedFood}</strong></div>`;
+  } catch(err){res.innerHTML='<span style="font-size:13px;color:var(--danger);">Search failed.</span>';}
+}
+
+function confirmBankAdd() {
+  const name=document.getElementById('ba-name').value.trim();
+  if(!name){alert('Please enter a name.');return;}
+  const key=bankKey(name);
+  const stdW=window._baUnitType==='countable'?(parseFloat(document.getElementById('ba-stdw').value)||null):null;
+  const stdMatch=Object.entries(STD_WEIGHTS).sort((a,b)=>b[0].length-a[0].length).find(([k])=>key.includes(k));
+  bank[key]={
+    name:key,displayName:name,
+    usdaMatch:window._baUsdaMatch?.usdaMatch||'',fdcId:window._baUsdaMatch?.fdcId||null,
+    cal:parseFloat(document.getElementById('ba-cal').value)||0,
+    protein:parseFloat(document.getElementById('ba-pro').value)||0,
+    carbs:parseFloat(document.getElementById('ba-carb').value)||0,
+    fat:parseFloat(document.getElementById('ba-fat').value)||0,
+    stdWeight:stdW??(stdMatch?stdMatch[1]:null),
+    unitType:window._baUnitType,
+    overridden:!window._baUsdaMatch,addedAt:Date.now(),
+  };
+  persistBank();closeModal('bank-add-modal');renderBank();
+}
+
+// ── Merge duplicates ───────────────────────────────────────────────────────
+function startMerge() {
+  bankMergeMode=!bankMergeMode;
+  bankMergeSelected.clear();
+  const btn=document.getElementById('merge-btn');
+  if(btn) btn.textContent=bankMergeMode?'Confirm merge':'Merge selected';
+  renderBank();
+}
+
+function toggleMergeSelect(name) {
+  bankMergeSelected.has(name)?bankMergeSelected.delete(name):bankMergeSelected.add(name);
+  renderBank();
+}
+
+function confirmMerge() {
+  if(!bankMergeMode){startMerge();return;}
+  if(bankMergeSelected.size<2){alert('Select at least 2 ingredients to merge.');return;}
+  const names=[...bankMergeSelected];
+  const entries=names.map(n=>bank[n]).filter(Boolean);
+  const opts=entries.map(e=>`<div class="pick-item" onclick="executeMerge('${e.name}',${JSON.stringify(names)})">${e.displayName||e.name}<div style="font-size:11px;color:var(--text3);">${e.usdaMatch||'manual'}</div></div>`).join('');
+  showModal('merge-modal',`
+    <div class="modal-title">Merge ${names.length} ingredients</div>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Select which entry to keep. All recipes update automatically.</p>
+    <div class="pick-list">${opts}</div>
+    <button class="btn btn-secondary" style="width:100%;margin-top:8px;" onclick="closeModal('merge-modal')">Cancel</button>`);
+}
+
+function executeMerge(keepName, allNames) {
+  const keepEntry=bank[keepName]; if(!keepEntry) return;
+  allNames.forEach(name=>{
+    if(name===keepName) return;
+    recipes.forEach(r=>(r.ingredients||[]).forEach(ing=>{ if(bankKey(ing.item)===name) ing.item=keepEntry.displayName||keepName; }));
+    delete bank[name];
+  });
+  persistBank();persist();bankMergeMode=false;bankMergeSelected.clear();
+  closeModal('merge-modal');renderBank();recalcAllRecipesFromBank().then(()=>renderLibrary());
+}
+
+// ── Extend showPage for new pages ──────────────────────────────────────────
+const _sp0=showPage;
+showPage=function(page){
+  _sp0(page);
+  if(page==='bank')renderBank();
+  if(page==='mealplan')renderMealPlan();
+  if(page==='tracking')renderTracking();
+};
+
 // ── Init ───────────────────────────────────────────────────────────────────
 renderLibrary();
+recalcAllRecipesFromBank().then(()=>{renderLibrary();console.log('Bank ready, recipes recalculated');});
 </script>
 </body>
 </html>
