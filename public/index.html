@@ -344,7 +344,7 @@ h1,h2,h3{font-family:'Lora',serif;}
       <div class="page-header">
         <div><h1 class="page-title">Ingredient Bank</h1><div class="page-subtitle" id="bank-subtitle"></div></div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <button class="btn btn-secondary" id="merge-btn" onclick="confirmMerge()" style="display:none;">Merge selected</button>
+          <button class="btn btn-secondary" id="merge-btn" onclick="startMerge()">⇔ Merge duplicates</button>
           <button class="btn btn-secondary" id="pull-btn" onclick="triggerBankPopulate()" title="Fetch all recipe ingredients from USDA and add to bank">↓ Pull from recipes</button>
           <button class="btn btn-primary" onclick="openBankAddModal()">+ Add ingredient</button>
         </div>
@@ -2339,7 +2339,7 @@ function renderBank() {
   if (sub) sub.textContent = entries.length + ' ingredient' + (entries.length !== 1 ? 's' : '') + ' · ' + entries.filter(e => e.overridden).length + ' overridden';
 
   const mergeBtn = document.getElementById('merge-btn');
-  if (mergeBtn) mergeBtn.style.display = bankMergeMode ? 'block' : 'none';
+  if (mergeBtn) mergeBtn.textContent = bankMergeMode ? '✓ Confirm merge' : '⇔ Merge duplicates';
 
   if (!filtered.length) {
     document.getElementById('bank-table-wrap').innerHTML = '<div class="empty-state"><h2>No ingredients yet</h2><p>Ingredients are added automatically when you save recipes. Click "↓ Pull from recipes" to import existing recipe ingredients, or click "+ Add ingredient" to add one manually.</p></div>';
@@ -2623,11 +2623,30 @@ function confirmDeleteBankEntry(name) {
 
 // ── Merge duplicates ───────────────────────────────────────────────────────
 function startMerge() {
-  bankMergeMode=!bankMergeMode;
+  if (bankMergeMode) {
+    // Already in merge mode — confirm or cancel
+    if (bankMergeSelected.size >= 2) {
+      confirmMerge();
+    } else {
+      // Cancel merge mode
+      bankMergeMode = false;
+      bankMergeSelected.clear();
+      renderBank();
+    }
+    return;
+  }
+  bankMergeMode = true;
   bankMergeSelected.clear();
-  const btn=document.getElementById('merge-btn');
-  if(btn) btn.textContent=bankMergeMode?'Confirm merge':'Merge selected';
   renderBank();
+  // Show a hint
+  const wrap = document.getElementById('bank-table-wrap');
+  if (wrap) {
+    const hint = document.createElement('div');
+    hint.id = 'merge-hint';
+    hint.style.cssText = 'background:#fef3e2;border:1px solid #f0d090;border-radius:8px;padding:8px 14px;font-size:13px;color:#92620a;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;';
+    hint.innerHTML = '<span>✓ Check the ingredients you want to merge, then click "Confirm merge"</span><button onclick="bankMergeMode=false;bankMergeSelected.clear();renderBank();" style="background:none;border:none;cursor:pointer;font-size:13px;color:#92620a;text-decoration:underline;">Cancel</button>';
+    wrap.parentNode.insertBefore(hint, wrap);
+  }
 }
 
 function toggleMergeSelect(name) {
