@@ -1378,55 +1378,48 @@ function mpSelectDay(dk) { mpActiveDay=dk; renderMPWeekGrid(getWeekDates(mpWeekO
 function renderMPDayPanel(dk, wk) {
   const d = new Date(dk+'T00:00:00');
   const title = d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
-  const m = dayMPMacros(wk,dk);
   const daySlots = ((mealPlan[wk]||{})[dk])||{};
   const wkProfiles = getMPWeekProfiles();
 
   const slotsHtml = MEAL_SLOTS.map(slot=>{
     const items = daySlots[slot]||[];
-    // slot macros
-    let sc=0,sp=0,sca=0,sf=0;
-    items.forEach(e=>{const r=recipes.find(r=>r.id===e.recipeId);if(!r||!hasMacros(r))return;const f=e.servings/r.servings;sc+=(r._overrides?.cal??r.cal)*f;sp+=(r._overrides?.protein??r.protein)*f;sca+=(r._overrides?.carbs??r.carbs)*f;sf+=(r._overrides?.fat??r.fat)*f;});
-    const slotMacStr = sc>0?`${Math.round(sc)} kcal · P${parseFloat(sp.toFixed(1))}g · C${parseFloat(sca.toFixed(1))}g · F${parseFloat(sf.toFixed(1))}g`:'';
-
     const itemsHtml = items.map((e,idx)=>{
-      const r=recipes.find(r=>r.id===e.recipeId); if(!r) return '';
-      const eaters = (e.eatingProfiles||wkProfiles).map(pid=>{const p=getProfile(pid);return p?`<span style="font-size:10px;padding:1px 5px;border-radius:99px;background:${p.color};color:#fff;">${p.name}</span>`:''}).join('');
-      const calPer = hasMacros(r)?Math.round((r._overrides?.cal??r.cal)*e.servings/r.servings)+' kcal':'';
+      let name, detail, calStr='';
+      if (e.recipeId) {
+        const r = recipes.find(r=>r.id===e.recipeId); if(!r) return '';
+        name = r.name;
+        detail = e.servings + ' serving' + (e.servings!==1?'s':'');
+        if (hasMacros(r)) calStr = Math.round(r.cal * e.servings / r.servings) + ' kcal';
+      } else if (e.bankKey) {
+        const bEntry = bank[e.bankKey];
+        name = e.bankName || (bEntry?.displayName) || e.bankKey;
+        detail = e.servings + (bEntry?.unitType==='countable'?' each':' serving'+(e.servings!==1?'s':''));
+        if (bEntry?.cal) calStr = Math.round(bEntry.cal * e.servings / 100) + ' kcal';
+      } else return '';
+      const eaters = (e.eatingProfiles||wkProfiles).map(pid=>{
+        const p=getProfile(pid); return p?`<span style="font-size:10px;padding:1px 5px;border-radius:99px;background:${p.color};color:#fff;">${p.name}</span>`:'';
+      }).join('');
       return `<div style="display:flex;align-items:center;gap:7px;padding:7px 9px;background:var(--bg);border-radius:var(--radius);margin-bottom:4px;">
         <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.name}</div>
-          <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:2px;">${eaters}<span style="font-size:11px;color:var(--text3);">${e.servings} srv</span></div>
+          <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${name}</div>
+          <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:2px;">${eaters}<span style="font-size:11px;color:var(--text3);">${detail}${calStr?' · '+calStr:''}</span></div>
         </div>
-        <div style="font-size:11px;color:var(--text2);white-space:nowrap;">${calPer}</div>
         <div style="display:flex;gap:3px;">
           <button class="btn-sm" onclick="mpEditEntry('${wk}','${dk}','${slot}',${idx})">✏</button>
-          <button class="btn-sm" onclick="mpCopyEntry('${wk}','${dk}','${slot}',${idx})" title="Copy to another day">⎘</button>
+          <button class="btn-sm" onclick="mpCopyEntry('${wk}','${dk}','${slot}',${idx})" title="Copy">⎘</button>
           <button class="btn-sm danger" onclick="mpRemoveEntry('${wk}','${dk}','${slot}',${idx})">×</button>
         </div>
       </div>`;
     }).join('');
-
     return `<div style="margin-bottom:14px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
-        <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text2);">${slot}</span>
-        <span style="font-size:11px;color:var(--text3);">${slotMacStr}</span>
-      </div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text2);margin-bottom:5px;">${slot}</div>
       ${itemsHtml}
-      <button style="width:100%;padding:6px;border:1.5px dashed var(--border2);border-radius:var(--radius);background:none;font-size:12px;color:var(--text3);cursor:pointer;font-family:'DM Sans',sans-serif;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'" onclick="mpOpenAddModal('${wk}','${dk}','${slot}',null)">+ Add recipe</button>
+      <button style="width:100%;padding:6px;border:1.5px dashed var(--border2);border-radius:var(--radius);background:none;font-size:12px;color:var(--text3);cursor:pointer;font-family:'DM Sans',sans-serif;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'" onclick="mpOpenAddModal('${wk}','${dk}','${slot}',null)">+ Add recipe or ingredient</button>
     </div>`;
   }).join('');
 
   document.getElementById('mp-day-panel').innerHTML = `<div class="detail-panel">
-    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px;">
-      <div style="font-family:'Lora',serif;font-size:19px;letter-spacing:-0.01em;">${title}</div>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:18px;">
-      <div style="background:var(--bg);border-radius:var(--radius);padding:9px;text-align:center;"><span style="font-size:16px;font-weight:700;display:block;color:var(--accent);">${m.cal}</span><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-top:3px;">Calories</div></div>
-      <div style="background:var(--bg);border-radius:var(--radius);padding:9px;text-align:center;"><span style="font-size:16px;font-weight:700;display:block;color:var(--accent2);">${m.protein}g</span><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-top:3px;">Protein</div></div>
-      <div style="background:var(--bg);border-radius:var(--radius);padding:9px;text-align:center;"><span style="font-size:16px;font-weight:700;display:block;">${m.carbs}g</span><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-top:3px;">Carbs</div></div>
-      <div style="background:var(--bg);border-radius:var(--radius);padding:9px;text-align:center;"><span style="font-size:16px;font-weight:700;display:block;">${m.fat}g</span><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-top:3px;">Fat</div></div>
-    </div>
+    <div style="font-family:'Lora',serif;font-size:19px;letter-spacing:-0.01em;margin-bottom:18px;">${title}</div>
     ${slotsHtml}
   </div>`;
 }
@@ -1436,34 +1429,121 @@ function mpOpenAddModal(wk, dk, slot, editIdx) {
   const existingEntry = editIdx!=null ? ((mealPlan[wk]?.[dk]?.[slot])||[])[editIdx] : null;
   const wkProfiles = getMPWeekProfiles();
   let selId = existingEntry?.recipeId || null;
+  let selBankKey = existingEntry?.bankKey || null;
   let selServings = existingEntry?.servings || 1;
   let selEaters = existingEntry?.eatingProfiles || [...wkProfiles];
-
-  const recipeList = recipes.length===0
-    ? '<p style="font-size:13px;color:var(--text3);">No recipes yet.</p>'
-    : recipes.map(r=>`<div onclick="mpPickRecipe(${r.id},this)" style="padding:8px 10px;border:1px solid ${selId===r.id?'var(--text)':'var(--border)'};border-radius:var(--radius);cursor:pointer;background:${selId===r.id?'var(--surface2)':'#fff'};font-size:13px;" data-id="${r.id}">
-        <div style="font-weight:500;">${r.name}</div>
-        <div style="font-size:11px;color:var(--text3);">${r.servingLabel||r.servings+' servings'} ${hasMacros(r)?'· '+(r._overrides?.cal??r.cal)+' kcal/srv':''}</div>
-      </div>`).join('');
-
-  const whoHtml = wkProfiles.map(pid=>{const p=getProfile(pid);if(!p)return'';const on=selEaters.includes(pid);
-    return `<span onclick="mpToggleEater(${pid},this)" data-pid="${pid}" style="padding:4px 10px;border-radius:99px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid ${on?p.color:'var(--border2)'};background:${on?p.color:'#fff'};color:${on?'#fff':'var(--text2)'};">${p.name}</span>`;}).join('');
+  let mpTab = existingEntry?.bankKey ? 'ingredient' : 'recipe';
 
   const d = new Date(dk+'T00:00:00');
   const dateStr = d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+  const whoHtml = wkProfiles.map(pid=>{
+    const p=getProfile(pid); if(!p) return '';
+    const on=selEaters.includes(pid);
+    return `<span onclick="mpToggleEater(${pid},this)" data-pid="${pid}" style="padding:4px 10px;border-radius:99px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid ${on?p.color:'var(--border2)'};background:${on?p.color:'#fff'};color:${on?'#fff':'var(--text2)'};">${p.name}</span>`;
+  }).join('');
 
-  window._mpModal = {wk,dk,slot,editIdx,selId,selServings,selEaters:[...selEaters]};
+  window._mpModal = {wk,dk,slot,editIdx,selId,selBankKey,selServings,selEaters:[...selEaters],tab:mpTab};
 
   showModal('mp-add-modal',`
     <div class="modal-title">${editIdx!=null?'Edit':'Add to'} ${slot} · ${dateStr}</div>
-    <div class="pick-list" id="mp-recipe-list">${recipeList}</div>
-    <div class="modal-field"><label>Servings</label><input type="number" id="mp-servings" min="0.5" step="0.5" value="${selServings}"/></div>
+    <div style="display:flex;gap:6px;margin-bottom:12px;">
+      <button id="mp-tab-recipe" class="unit-tab${mpTab==='recipe'?' active':''}" onclick="mpSwitchTab('recipe')">Recipe</button>
+      <button id="mp-tab-ingredient" class="unit-tab${mpTab==='ingredient'?' active':''}" onclick="mpSwitchTab('ingredient')">Ingredient</button>
+    </div>
+    <div id="mp-tab-content"></div>
+    <div class="modal-field" style="margin-top:10px;"><label>Servings / Amount</label><input type="number" id="mp-servings" min="0.5" step="0.5" value="${selServings}"/></div>
     ${wkProfiles.length>1?`<div class="modal-field"><label>Who's eating</label><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px;" id="mp-eaters">${whoHtml}</div></div>`:''}
     <div class="btn-row" style="margin-top:14px;">
       <button class="btn btn-primary" onclick="mpConfirmEntry()">Save</button>
       <button class="btn btn-secondary" onclick="closeModal('mp-add-modal')">Cancel</button>
     </div>`);
+  mpSwitchTab(mpTab);
 }
+
+function mpSwitchTab(tab) {
+  window._mpModal.tab = tab;
+  document.querySelectorAll('#mp-add-modal .unit-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('mp-tab-'+tab)?.classList.add('active');
+  const content = document.getElementById('mp-tab-content');
+  if (!content) return;
+
+  if (tab === 'recipe') {
+    // Group recipes by category
+    const cats = {};
+    recipes.forEach(r => {
+      const cat = r.category || 'Uncategorized';
+      if (!cats[cat]) cats[cat] = [];
+      cats[cat].push(r);
+    });
+    const selId = window._mpModal.selId;
+    const grouped = Object.entries(cats).sort((a,b)=>a[0].localeCompare(b[0])).map(([cat,recs])=>{
+      const rows = recs.map(r=>`<div onclick="mpPickRecipe(${r.id},this)" data-id="${r.id}"
+        style="padding:8px 10px;border:1px solid ${selId===r.id?'var(--text)':'var(--border)'};border-radius:var(--radius);cursor:pointer;background:${selId===r.id?'var(--surface2)':'#fff'};font-size:13px;margin-bottom:4px;">
+        <div style="font-weight:500;">${r.name}</div>
+        <div style="font-size:11px;color:var(--text3);">${r.servingLabel||r.servings+' servings'} ${hasMacros(r)?'· '+Math.round(r.cal)+' kcal/srv':''}</div>
+      </div>`).join('');
+      return `<div style="margin-bottom:8px;">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);margin-bottom:5px;">${cat}</div>
+        ${rows}
+      </div>`;
+    }).join('');
+
+    content.innerHTML = `
+      <input type="text" placeholder="Search recipes…" oninput="mpFilterRecipes(this.value)"
+        style="width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--radius);font-size:13px;font-family:'DM Sans',sans-serif;margin-bottom:10px;box-sizing:border-box;"/>
+      <div id="mp-recipe-list" style="max-height:220px;overflow-y:auto;">${recipes.length?grouped:'<p style="font-size:13px;color:var(--text3);">No recipes yet.</p>'}</div>`;
+  } else {
+    // Ingredient bank search
+    const selBankKey = window._mpModal.selBankKey;
+    const entries = Object.values(bank).sort((a,b)=>a.name.localeCompare(b.name));
+    const rows = entries.map(e=>`<div onclick="mpPickIngredient('${e.name}',this)" data-key="${e.name}"
+      style="padding:8px 10px;border:1px solid ${selBankKey===e.name?'var(--text)':'var(--border)'};border-radius:var(--radius);cursor:pointer;background:${selBankKey===e.name?'var(--surface2)':'#fff'};font-size:13px;margin-bottom:4px;">
+      <div style="font-weight:500;">${e.displayName||e.name}</div>
+      <div style="font-size:11px;color:var(--text3);">${e.cal!=null?Math.round(e.cal)+' cal/100g':''} · ${e.unitType||'weight'}</div>
+    </div>`).join('');
+    content.innerHTML = `
+      <input type="text" placeholder="Search ingredient bank…" oninput="mpFilterIngredients(this.value)"
+        style="width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--radius);font-size:13px;font-family:'DM Sans',sans-serif;margin-bottom:10px;box-sizing:border-box;"/>
+      <div id="mp-ing-list" style="max-height:220px;overflow-y:auto;">${entries.length?rows:'<p style="font-size:13px;color:var(--text3);">No ingredients in bank yet.</p>'}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:6px;">Enter amount in the Servings field (e.g. 1 for 1 piece, or grams for weight items).</div>`;
+  }
+}
+
+function mpFilterRecipes(q) {
+  const list = document.getElementById('mp-recipe-list'); if(!list) return;
+  const ql = q.toLowerCase();
+  const selId = window._mpModal.selId;
+  if (!q) { mpSwitchTab('recipe'); return; }
+  // Flat filtered list when searching
+  const matches = recipes.filter(r => r.name.toLowerCase().includes(ql));
+  list.innerHTML = matches.map(r=>`<div onclick="mpPickRecipe(${r.id},this)" data-id="${r.id}"
+    style="padding:8px 10px;border:1px solid ${selId===r.id?'var(--text)':'var(--border)'};border-radius:var(--radius);cursor:pointer;background:${selId===r.id?'var(--surface2)':'#fff'};font-size:13px;margin-bottom:4px;">
+    <div style="font-weight:500;">${r.name}</div>
+    <div style="font-size:11px;color:var(--text3);">${r.category||''} ${hasMacros(r)?'· '+Math.round(r.cal)+' kcal/srv':''}</div>
+  </div>`).join('') || '<p style="font-size:13px;color:var(--text3);">No matches.</p>';
+}
+
+function mpFilterIngredients(q) {
+  const list = document.getElementById('mp-ing-list'); if(!list) return;
+  const ql = q.toLowerCase();
+  const selBankKey = window._mpModal.selBankKey;
+  const entries = Object.values(bank)
+    .filter(e => !q || e.name.includes(ql) || (e.displayName||'').toLowerCase().includes(ql))
+    .sort((a,b)=>a.name.localeCompare(b.name));
+  list.innerHTML = entries.map(e=>`<div onclick="mpPickIngredient('${e.name}',this)" data-key="${e.name}"
+    style="padding:8px 10px;border:1px solid ${selBankKey===e.name?'var(--text)':'var(--border)'};border-radius:var(--radius);cursor:pointer;background:${selBankKey===e.name?'var(--surface2)':'#fff'};font-size:13px;margin-bottom:4px;">
+    <div style="font-weight:500;">${e.displayName||e.name}</div>
+    <div style="font-size:11px;color:var(--text3);">${e.cal!=null?Math.round(e.cal)+' cal/100g':''} · ${e.unitType||'weight'}</div>
+  </div>`).join('') || '<p style="font-size:13px;color:var(--text3);">No matches.</p>';
+}
+
+function mpPickIngredient(key, el) {
+  window._mpModal.selBankKey = key;
+  window._mpModal.selId = null;
+  document.querySelectorAll('#mp-ing-list > div').forEach(e=>{e.style.borderColor='var(--border)';e.style.background='#fff';});
+  el.style.borderColor='var(--text)'; el.style.background='var(--surface2)';
+}
+
 
 function mpPickRecipe(id, el) {
   window._mpModal.selId = id;
@@ -1482,13 +1562,20 @@ function mpToggleEater(pid, el) {
 
 function mpConfirmEntry() {
   const m = window._mpModal;
-  if (!m.selId) { alert('Please select a recipe.'); return; }
+  if (!m.selId && !m.selBankKey) { alert('Please select a recipe or ingredient.'); return; }
   const servings = parseFloat(document.getElementById('mp-servings').value)||1;
   const eaters = m.selEaters.length ? m.selEaters : getMPWeekProfiles();
   ensureWeek(m.wk);
   if (!mealPlan[m.wk][m.dk]) mealPlan[m.wk][m.dk]={};
   if (!mealPlan[m.wk][m.dk][m.slot]) mealPlan[m.wk][m.dk][m.slot]=[];
-  const entry = {recipeId:m.selId, servings, eatingProfiles:[...eaters]};
+  let entry;
+  if (m.selId) {
+    entry = {recipeId:m.selId, servings, eatingProfiles:[...eaters]};
+  } else {
+    // Ingredient bank entry
+    const bEntry = bank[m.selBankKey];
+    entry = {bankKey:m.selBankKey, bankName:bEntry?.displayName||m.selBankKey, servings, eatingProfiles:[...eaters]};
+  }
   if (m.editIdx!=null) mealPlan[m.wk][m.dk][m.slot][m.editIdx]=entry;
   else mealPlan[m.wk][m.dk][m.slot].push(entry);
   persistMP(); closeModal('mp-add-modal');
@@ -1606,91 +1693,139 @@ function renderTRWeekGrid(days) {
 
 function trSelectDay(dk) { trActiveDay=dk; renderTRWeekGrid(getWeekDates(trWeekOffset)); renderTRDayPanel(dk); }
 
-function renderTRDayPanel(dk) {
-  const pid = trActiveProfile;
-  const p = getProfile(pid); if(!p) return;
-  const d = new Date(dk+'T00:00:00');
-  const title = d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
-  const m = trDayMacros(dk,pid);
-  const goals = p.goals;
-  const logged = getTRDay(dk,pid);
 
-  // Goal progress bars
-  const bar = (val,goal,color) => {
-    const pct=Math.min(100,Math.round(val/goal*100));
-    return `<div style="height:5px;background:var(--border);border-radius:99px;overflow:hidden;margin-bottom:8px;"><div style="height:5px;width:${pct}%;background:${color};border-radius:99px;"></div></div>`;
-  };
-
-  // Get scheduled meals for this day to pre-populate suggestions
+// ── Auto-log scheduled meals for a day ────────────────────────────────────
+function autoLogDayFromPlan(dk, pid) {
   const wk = weekKey(trWeekOffset);
   const scheduledItems = [];
-  MEAL_SLOTS.forEach(slot=>{
-    ((mealPlan[wk]||{})[dk]||{})[slot]?.forEach(e=>{
+  MEAL_SLOTS.forEach(slot => {
+    ((mealPlan[wk]||{})[dk]||{})[slot]?.forEach(e => {
       if ((e.eatingProfiles||getMPWeekProfiles()).includes(pid)) {
         scheduledItems.push({...e, slot});
       }
     });
   });
+  if (!scheduledItems.length) return; // nothing planned
 
-  // Logged items
-  const loggedHtml = logged.length===0
-    ? '<p style="font-size:13px;color:var(--text3);padding:8px 0;">Nothing logged yet for this day.</p>'
-    : logged.map((e,idx)=>{
-        const calStr = e.cal!=null?Math.round(e.cal)+' kcal':'';
-        return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg);border-radius:var(--radius);margin-bottom:5px;">
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${e.name}</div>
-            <div style="font-size:11px;color:var(--text3);">${e.servings} serving${e.servings!==1?'s':''} · ${calStr}</div>
-          </div>
-          <div style="font-size:11px;color:var(--text2);text-align:right;min-width:120px;">P${e.protein}g C${e.carbs}g F${e.fat}g</div>
-          <div style="display:flex;gap:3px;">
-            <button class="btn-sm" onclick="trEditEntry('${dk}',${pid},${idx})">✏</button>
-            <button class="btn-sm danger" onclick="trRemoveEntry('${dk}',${pid},${idx})">×</button>
-          </div>
-        </div>`;
-      }).join('');
+  const existing = getTRDay(dk, pid);
+  const wkp = getMPWeekProfiles();
 
-  // Scheduled suggestions (not yet logged for this profile)
-  const loggedRecipeIds = logged.filter(e=>!e.isCustom).map(e=>e.recipeId+'_'+e.servings);
-  const suggestHtml = scheduledItems.length===0 ? ''
-    : `<div style="margin-top:14px;">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);margin-bottom:6px;">From today's meal plan</div>
-        ${scheduledItems.map(e=>{
-          const r=recipes.find(r=>r.id===e.recipeId); if(!r) return '';
-          const wkp = getMPWeekProfiles();
-          const perPerson = Math.round((e.servings / (e.eatingProfiles||wkp).length)*10)/10;
-          return `<div style="display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:4px;background:#fff;">
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.name}</div>
-              <div style="font-size:11px;color:var(--text3);">${e.slot} · ${perPerson} srv scheduled for you</div>
-            </div>
-            <button class="btn btn-primary" style="padding:4px 10px;font-size:12px;" onclick="trLogFromSchedule('${dk}',${pid},${e.recipeId},${perPerson})">Log</button>
-          </div>`;
-        }).join('')}
-      </div>`;
+  scheduledItems.forEach(e => {
+    const perPerson = (e.servings / (e.eatingProfiles||wkp).length);
+    const servings = Math.round(perPerson * 10) / 10;
+
+    if (e.recipeId) {
+      const r = recipes.find(r => r.id === e.recipeId); if (!r) return;
+      // Skip if already logged (same recipeId + slot combo)
+      const alreadyLogged = existing.some(l => l.recipeId === e.recipeId && l.slot === e.slot);
+      if (alreadyLogged) return;
+      const factor = servings / (r.servings || 1);
+      existing.push({
+        recipeId: e.recipeId, name: r.name, slot: e.slot, servings,
+        cal: hasMacros(r) ? Math.round((r._overrides?.cal??r.cal) * factor) : 0,
+        protein: hasMacros(r) ? parseFloat((((r._overrides?.protein??r.protein)||0) * factor).toFixed(1)) : 0,
+        carbs: hasMacros(r) ? parseFloat((((r._overrides?.carbs??r.carbs)||0) * factor).toFixed(1)) : 0,
+        fat: hasMacros(r) ? parseFloat((((r._overrides?.fat??r.fat)||0) * factor).toFixed(1)) : 0,
+        autoLogged: true, isCustom: false,
+      });
+    } else if (e.bankKey) {
+      const bEntry = bank[e.bankKey];
+      const alreadyLogged = existing.some(l => l.bankKey === e.bankKey && l.slot === e.slot);
+      if (alreadyLogged) return;
+      const scale = servings / 100;
+      existing.push({
+        bankKey: e.bankKey, name: e.bankName || (bEntry?.displayName) || e.bankKey,
+        slot: e.slot, servings,
+        cal: bEntry?.cal ? Math.round(bEntry.cal * scale) : 0,
+        protein: bEntry?.protein ? parseFloat((bEntry.protein * scale).toFixed(1)) : 0,
+        carbs: bEntry?.carbs ? parseFloat((bEntry.carbs * scale).toFixed(1)) : 0,
+        fat: bEntry?.fat ? parseFloat((bEntry.fat * scale).toFixed(1)) : 0,
+        autoLogged: true, isCustom: false,
+      });
+    }
+  });
+  persistTR();
+}
+
+function renderTRDayPanel(dk) {
+  const pid = trActiveProfile;
+  const p = getProfile(pid); if (!p) return;
+
+  // Auto-log from plan before rendering
+  autoLogDayFromPlan(dk, pid);
+
+  const d = new Date(dk+'T00:00:00');
+  const title = d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  const m = trDayMacros(dk, pid);
+  const goals = p.goals;
+  const logged = getTRDay(dk, pid);
+
+  // Progress bar
+  const bar = (val, goal, color) => {
+    const pct = Math.min(100, Math.round(val/goal*100));
+    return `<div style="height:5px;background:var(--border);border-radius:99px;overflow:hidden;margin-bottom:8px;"><div style="height:5px;width:${pct}%;background:${color};border-radius:99px;"></div></div>`;
+  };
+
+  // Group logged items by slot
+  const bySlot = {};
+  MEAL_SLOTS.forEach(s => bySlot[s] = []);
+  const extras = [];
+  logged.forEach((e, idx) => {
+    if (e.slot && bySlot[e.slot]) bySlot[e.slot].push({e, idx});
+    else extras.push({e, idx});
+  });
+
+  const renderEntry = ({e, idx}) => {
+    const calStr = e.cal != null ? Math.round(e.cal) + ' kcal' : '';
+    const edited = !e.autoLogged ? '<span style="font-size:10px;color:var(--accent3);margin-left:4px;">edited</span>' : '';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg);border-radius:var(--radius);margin-bottom:4px;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${e.name}${edited}</div>
+        <div style="font-size:11px;color:var(--text3);">${e.servings} serving${e.servings!==1?'s':''} · ${calStr}</div>
+      </div>
+      <div style="font-size:11px;color:var(--text2);text-align:right;min-width:100px;">P${e.protein}g C${e.carbs}g F${e.fat}g</div>
+      <div style="display:flex;gap:3px;">
+        <button class="btn-sm" onclick="trEditEntry('${dk}',${pid},${idx})">✏</button>
+        <button class="btn-sm danger" onclick="trRemoveEntry('${dk}',${pid},${idx})">×</button>
+      </div>
+    </div>`;
+  };
+
+  const slotsHtml = MEAL_SLOTS.map(slot => {
+    const items = bySlot[slot];
+    if (!items.length) return '';
+    return `<div style="margin-bottom:12px;">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);margin-bottom:5px;">${slot}</div>
+      ${items.map(renderEntry).join('')}
+    </div>`;
+  }).join('');
+
+  const extrasHtml = extras.length ? `<div style="margin-bottom:12px;">
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);margin-bottom:5px;">Ad-hoc</div>
+    ${extras.map(renderEntry).join('')}
+  </div>` : '';
+
+  const emptyHtml = !logged.length ? `<p style="font-size:13px;color:var(--text3);padding:8px 0;">Nothing logged for this day. Add items below or schedule meals in the Meal Planning section.</p>` : '';
 
   document.getElementById('tr-day-panel').innerHTML = `<div class="detail-panel">
     <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
       <div style="font-family:'Lora',serif;font-size:19px;letter-spacing:-0.01em;">${title}</div>
-      <div style="display:flex;align-items:center;gap:6px;">
-        <span style="font-size:12px;color:var(--text2);">Viewing:</span>
-        <span style="padding:3px 10px;border-radius:99px;font-size:12px;font-weight:600;background:${p.color};color:#fff;">${p.name}</span>
-      </div>
+      <span style="padding:3px 10px;border-radius:99px;font-size:12px;font-weight:600;background:${p.color};color:#fff;">${p.name}</span>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">
       <div style="background:var(--bg);border-radius:var(--radius);padding:9px;text-align:center;"><span style="font-size:16px;font-weight:700;display:block;color:var(--accent);">${m.cal}</span><div style="font-size:9px;color:var(--text3);margin-top:2px;">of ${goals.cal}</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);">kcal</div></div>
       <div style="background:var(--bg);border-radius:var(--radius);padding:9px;text-align:center;"><span style="font-size:16px;font-weight:700;display:block;color:var(--accent2);">${m.protein}g</span><div style="font-size:9px;color:var(--text3);margin-top:2px;">of ${goals.protein}g</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);">protein</div></div>
       <div style="background:var(--bg);border-radius:var(--radius);padding:9px;text-align:center;"><span style="font-size:16px;font-weight:700;display:block;">${m.carbs}g</span><div style="font-size:9px;color:var(--text3);margin-top:2px;">of ${goals.carbs}g</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);">carbs</div></div>
       <div style="background:var(--bg);border-radius:var(--radius);padding:9px;text-align:center;"><span style="font-size:16px;font-weight:700;display:block;">${m.fat}g</span><div style="font-size:9px;color:var(--text3);margin-top:2px;">of ${goals.fat}g</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);">fat</div></div>
     </div>
-    ${bar(m.cal,goals.cal,p.color)}
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text2);margin-bottom:8px;">Logged today</div>
-    ${loggedHtml}
-    <div style="display:flex;gap:8px;margin-top:10px;">
-      <button class="btn btn-primary" style="flex:1;" onclick="trOpenLogModal('${dk}',${pid},null)">+ Log a meal</button>
+    ${bar(m.cal, goals.cal, p.color)}
+    ${emptyHtml}
+    ${slotsHtml}
+    ${extrasHtml}
+    <div style="display:flex;gap:8px;margin-top:12px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="trOpenLogModal('${dk}',${pid},null)">+ Add from recipes</button>
       <button class="btn btn-secondary" style="flex:1;" onclick="trOpenCustomModal('${dk}',${pid})">+ Custom item</button>
     </div>
-    ${suggestHtml}
   </div>`;
 }
 
@@ -1740,6 +1875,7 @@ function trConfirmLog() {
     isCustom:false
   };
   const list = getTRDay(dk,pid);
+  entry.autoLogged = false; // manually confirmed/edited
   editIdx!=null ? list[editIdx]=entry : list.push(entry);
   persistTR(); closeModal('tr-log-modal'); renderTRDayPanel(dk); renderTRWeekGrid(getWeekDates(trWeekOffset));
 }
@@ -1776,13 +1912,20 @@ function trConfirmCustom() {
     isCustom:true
   };
   const list=getTRDay(dk,pid);
+  entry.autoLogged = false;
   editIdx!=null?list[editIdx]=entry:list.push(entry);
   persistTR(); closeModal('tr-custom-modal'); renderTRDayPanel(dk); renderTRWeekGrid(getWeekDates(trWeekOffset));
 }
 
 function trEditEntry(dk,pid,idx) {
   const e=getTRDay(dk,pid)[idx]; if(!e) return;
-  e.isCustom ? trOpenCustomModal(dk,pid,idx) : (() => { window._trLog={dk,pid,selId:e.recipeId,editIdx:idx}; trOpenLogModal(dk,pid,{recipeId:e.recipeId,servings:e.servings}); })();
+  if (e.isCustom) {
+    trOpenCustomModal(dk,pid,idx);
+  } else {
+    // Open edit modal — on save, autoLogged will be cleared
+    window._trLog={dk,pid,selId:e.recipeId,editIdx:idx};
+    trOpenLogModal(dk,pid,{recipeId:e.recipeId,servings:e.servings});
+  }
 }
 
 function trRemoveEntry(dk,pid,idx) {
