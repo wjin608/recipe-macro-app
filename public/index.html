@@ -559,6 +559,9 @@ async function importFromUrl(){
     if(!match)throw new Error('Could not extract recipe from that page. Try uploading the recipe as a text file instead.');
     const r=JSON.parse(match[0]);
     if(!r.name||!r.ingredients||r.ingredients.length===0)throw new Error('Incomplete recipe extracted. Try a different URL or manual entry.');
+    setStatus(statusEl,'loading','Checking ingredient names against your bank...');
+    // Review step — AI compares imported names to bank, user confirms unification
+    r.ingredients = await reviewIngredientNames(r.ingredients);
     setStatus(statusEl,'loading','Calculating macros...');
     const ingLines=r.ingredients.map(i=>`${i.amount} ${i.item}`).join('\n');
     let macros=null;try{macros=await calculateMacros(r.name,r.servings,ingLines,r.ingredients);}catch(e){}
@@ -2778,6 +2781,141 @@ showPage=function(page){
   if(page==='mealplan')renderMealPlan();
   if(page==='tracking')renderTracking();
 };
+
+// ── Pull from recipes (additive only) ────────────────────────────────────
+async function triggerBankPopulate() {
+  if (!recipes.length) { alert('No recipes found. Add some recipes first.'); return; }
+  const btn = document.getElementById('pull-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Pulling…'; }
+
+  // Additive only — only fetch ingredients NOT already in the bank
+  const seen = new Set();
+  const newIngs = [];
+  recipes.forEach(r => (r.ingredients||[]).forEach(ing => {
+    const k = bankKey(ing.item);
+    if (ing.item && !bank[k] && !seen.has(k)) { seen.add(k); newIngs.push(ing); }
+  }));
+
+  if (newIngs.length) {
+    await populateBankFromIngredients(newIngs);
+    await recalcAllRecipesFromBank();
+    renderLibrary();
+  }
+  renderBank();
+
+  if (btn) {
+    btn.disabled = false;
+    const added = newIngs.length;
+    btn.textContent = added > 0 ? `↓ Added ${added} new` : '↓ Pull from recipes';
+    if (added > 0) setTimeout(() => { btn.textContent = '↓ Pull from recipes'; }, 3000);
+  }
+}
+
+// ── AI ingredient name unification (URL import review) ────────────────────
+async function reviewIngredientNames(ingredients) {
+  // Build bank name list for comparison
+  const bankNames = Object.values(bank).map(e => e.displayName || e.name);
+  if (!bankNames.length) return ingredients; // no bank yet, skip review
+
+  const ingNames = ingredients.map(i => i.item);
+
+  // Ask Claude Haiku to match imported names to bank names
+  let mapping = {};
+  try {
+    const resp = await fetch('/api/proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 500,
+        messages: [{
+          role: 'user',
+          content: `You are matching ingredient names from a recipe to a user's ingredient bank.
+
+Imported ingredients: ${JSON.stringify(ingNames)}
+
+Bank ingredients: ${JSON.stringify(bankNames)}
+
+For each imported ingredient, if there is a clearly matching bank ingredient (same food, possibly different wording), return the bank name. Only match when confident. If no clear match, return null.
+
+Reply with ONLY a JSON object like: {"boneless chicken breast": "Chicken Breast", "all purpose flour": "All Purpose Flour", "heavy whipping cream": null}
+No markdown, no explanation.`
+        }]
+      })
+    });
+    const data = await resp.json();
+    const text = (data.content?.[0]?.text || '').trim();
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) mapping = JSON.parse(match[0]);
+  } catch(e) {
+    console.warn('Name review AI call failed:', e.message);
+    return ingredients; // fail gracefully, skip review
+  }
+
+  // Filter to only suggestions where name actually differs
+  const suggestions = Object.entries(mapping).filter(([orig, suggested]) =>
+    suggested && suggested.toLowerCase() !== orig.toLowerCase()
+  );
+
+  if (!suggestions.length) return ingredients; // no suggestions, skip review
+
+  // Show review modal
+  return new Promise(resolve => {
+    window._nameReviewResolve = resolve;
+    window._nameReviewIngredients = ingredients;
+    window._nameReviewMapping = Object.fromEntries(suggestions);
+
+    const rows = suggestions.map(([orig, suggested]) => `
+      <tr id="nr-row-${CSS.escape(orig)}">
+        <td style="padding:8px 10px;font-size:13px;color:var(--text2);">${orig}</td>
+        <td style="padding:8px 10px;text-align:center;font-size:18px;color:var(--text3);">→</td>
+        <td style="padding:8px 10px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="nr-chk-${CSS.escape(orig)}" checked style="width:15px;height:15px;"/>
+            <span style="font-size:13px;font-weight:500;">${suggested}</span>
+          </label>
+        </td>
+      </tr>`).join('');
+
+    showModal('name-review-modal', `
+      <div class="modal-title">🔗 Unify ingredient names?</div>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">These imported ingredients look like items already in your bank. Check the ones you'd like to rename to match your bank — this keeps macros consistent.</p>
+      <table style="width:100%;margin-bottom:14px;">
+        <thead><tr>
+          <th style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);text-align:left;">Imported as</th>
+          <th></th>
+          <th style="padding:6px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);text-align:left;">Use bank name</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="confirmNameReview()">Apply & continue</button>
+        <button class="btn btn-secondary" onclick="skipNameReview()">Skip, keep original names</button>
+      </div>`);
+  });
+}
+
+function confirmNameReview() {
+  const ingredients = window._nameReviewIngredients;
+  const mapping = window._nameReviewMapping;
+  // Apply only checked suggestions
+  const updated = ingredients.map(ing => {
+    const suggested = mapping[ing.item];
+    if (!suggested) return ing;
+    const chk = document.getElementById('nr-chk-' + CSS.escape(ing.item));
+    if (chk && chk.checked) {
+      return { ...ing, item: suggested };
+    }
+    return ing;
+  });
+  closeModal('name-review-modal');
+  window._nameReviewResolve?.(updated);
+}
+
+function skipNameReview() {
+  closeModal('name-review-modal');
+  window._nameReviewResolve?.(window._nameReviewIngredients);
+}
 
 // ── Init ───────────────────────────────────────────────────────────────────
 // Pre-populate bank with common ingredients on first load
