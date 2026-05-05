@@ -2289,8 +2289,13 @@ function prePopulateBank() {
 // INGREDIENT BANK
 // ══════════════════════════════════════════════════════════════════════════
 const BANK_KEY = 'rma_bank_v1';
+const BANK_DELETED_KEY = 'rma_bank_deleted_v1';
 let bank = JSON.parse(localStorage.getItem(BANK_KEY) || '{}');
+// Set of keys intentionally deleted/merged — never re-fetch these on init
+let bankDeleted = new Set(JSON.parse(localStorage.getItem(BANK_DELETED_KEY) || '[]'));
 function persistBank() { localStorage.setItem(BANK_KEY, JSON.stringify(bank)); }
+function persistBankDeleted() { localStorage.setItem(BANK_DELETED_KEY, JSON.stringify([...bankDeleted])); }
+function markBankDeleted(key) { bankDeleted.add(bankKey(key)); persistBankDeleted(); }
 function bankKey(name) { return (name||'').toLowerCase().trim(); }
 
 const STD_WEIGHTS = {
@@ -2680,6 +2685,7 @@ function saveBankEdit(name) {
     e.displayName = newDisplayName;
     bank[newKey] = e;
     delete bank[oldKey];
+    markBankDeleted(oldKey); // prevent re-fetch on next page load
     // Update all recipes using old name
     recipes.forEach(r => (r.ingredients||[]).forEach(ing => {
       if (bankKey(ing.item) === oldKey) ing.item = newDisplayName;
@@ -2815,10 +2821,10 @@ function deleteBankEntry(name) {
 
 function confirmDeleteBankEntry(name) {
   delete bank[name];
+  markBankDeleted(name); // prevent re-fetch on next page load
   persistBank();
   closeModal('bank-delete-modal');
   renderBank();
-  // Recalc without re-fetching so deleted entry doesn't come back
   recalcAllRecipesFromBank(false).then(()=>renderLibrary());
 }
 
@@ -2882,10 +2888,10 @@ function executeMerge(keepName, allNames) {
     if(name===keepName) return;
     recipes.forEach(r=>(r.ingredients||[]).forEach(ing=>{ if(bankKey(ing.item)===name) ing.item=keepEntry.displayName||keepName; }));
     delete bank[name];
+    markBankDeleted(name); // prevent re-fetch on next page load
   });
   persistBank();persist();bankMergeMode=false;bankMergeSelected.clear();
   closeModal('merge-modal');renderBank();
-  // Pass false so deleted entries are not re-fetched from USDA
   recalcAllRecipesFromBank(false).then(()=>renderLibrary());
 }
 
@@ -3045,7 +3051,10 @@ renderLibrary();
     const seen = new Set();
     recipes.forEach(r => (r.ingredients||[]).forEach(ing => {
       const k = bankKey(ing.item);
-      if (ing.item && !bank[k] && !seen.has(k)) { seen.add(k); allIngs.push(ing); }
+      // Skip if already in bank OR intentionally deleted/merged
+      if (ing.item && !bank[k] && !seen.has(k) && !bankDeleted.has(k)) {
+        seen.add(k); allIngs.push(ing);
+      }
     }));
     if (allIngs.length > 0) {
       console.log('Populating bank with', allIngs.length, 'ingredients from existing recipes…');
