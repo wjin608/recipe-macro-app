@@ -2262,6 +2262,7 @@ function prePopulateBank() {
   PREPOPULATED_INGREDIENTS.forEach(item => {
     const key = bankKey(item.name);
     if (bank[key]) return; // don't overwrite existing entries
+    if (bankDeleted.has(key)) return; // user intentionally removed this
     bank[key] = {
       name: key,
       displayName: item.name.replace(/\b\w/g, l => l.toUpperCase()),
@@ -2391,7 +2392,9 @@ function calcIngMacrosFromBank(ing) {
 async function populateBankFromIngredients(ingredients) {
   const seen = new Set();
   const toFetch = ingredients.filter(ing => {
-    const k = bankKey(ing.item); if (seen.has(k)||bank[k]) return false; seen.add(k); return true;
+    const k = bankKey(ing.item);
+    if (seen.has(k) || bank[k] || bankDeleted.has(k)) return false; // skip deleted
+    seen.add(k); return true;
   });
   if (!toFetch.length) return;
 
