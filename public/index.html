@@ -2130,6 +2130,60 @@ const PREPOPULATED_INGREDIENTS = [
   { name:'edamame',            cal:121, protein:11,   carbs:9,    fat:5.2,  stdWeight:null,unitType:'weight',    cat:'Tofu & Legumes',    usdaMatch:'Edamame, frozen, prepared' },
 ];
 
+function migrateLegacyCategories() {
+  // Rename old category names to new ones — runs on ALL entries including overridden
+  const RENAMES = {
+    'Condiments & Sauces': 'Condiments, Sauces & Spices',
+    'Herbs & Spices': 'Condiments, Sauces & Spices',
+  };
+  // Also fix clearly wrong category assignments regardless of override
+  const FORCE_CATS = {
+    'granulated sugar': 'Sweeteners',
+    'white sugar': 'Sweeteners',
+    'vegetable oil': 'Oils & Fats',
+    'canola oil': 'Oils & Fats',
+    'corn oil': 'Oils & Fats',
+  };
+  let changed = 0;
+  Object.values(bank).forEach(entry => {
+    // Rename legacy category
+    if (entry.category && RENAMES[entry.category]) {
+      entry.category = RENAMES[entry.category];
+      changed++;
+    }
+    // Fix specific wrong categories (by name, regardless of override)
+    const forceCat = FORCE_CATS[entry.name];
+    if (forceCat && entry.category !== forceCat) {
+      entry.category = forceCat;
+      changed++;
+    }
+  });
+  // Fix specific known wrong entries by name
+  const ENTRY_FIXES = {
+    'eggplant':         { unitType: 'weight', stdWeight: null },
+    'tomato paste':     { unitType: 'volume', stdWeight: null },
+    'sweet potato':     { unitType: 'weight', stdWeight: null },
+    'sun-dried tomato': { unitType: 'countable', stdWeight: 5 },
+    'sundried tomato':  { unitType: 'countable', stdWeight: 5 },
+    'heavy cream':      { unitType: 'volume' },
+    'whole milk':       { unitType: 'volume' },
+    '2% milk':          { unitType: 'volume' },
+    'milk':             { unitType: 'volume' },
+    'mascarpone':       { unitType: 'weight' },
+    'cream cheese':     { unitType: 'weight' },
+    'mozzarella':       { unitType: 'weight' },
+    'ricotta':          { unitType: 'weight' },
+    'parmesan':         { unitType: 'weight' },
+  };
+  Object.entries(ENTRY_FIXES).forEach(([key, fixes]) => {
+    const entry = bank[key];
+    if (!entry) return;
+    Object.assign(entry, fixes);
+    changed++;
+  });
+  if (changed > 0) { persistBank(); console.log('Migrated', changed, 'category entries'); }
+}
+
 function fixBankCategories() {
   // Correct known mis-categorized ingredients in existing bank entries
   const FORCE_RULES = [
@@ -2165,7 +2219,10 @@ function fixBankCategories() {
 
   // Fix known incorrect unit types
   const VOLUME_INGREDIENTS = ['milk','cream','butter','oil','syrup','honey','broth',
-    'juice','sauce','vinegar','wine','sake','mirin','extract','yogurt'];
+    'juice','vinegar','wine','sake','mirin','extract','yogurt'];
+  // Never convert these to volume even if they contain volume keywords
+  const NEVER_VOLUME = ['coconut milk','almond milk','oat milk','soy milk',
+    'cream cheese','ice cream','sour cream'];
   const COUNTABLE_FIXES = {
     'egg':50,'egg yolk':17,'egg white':33,'large egg':57,'whole egg':50,
     'garlic clove':5,'banana':118,'apple':182,'onion':110,'tomato':123,
@@ -2173,19 +2230,25 @@ function fixBankCategories() {
     'bell pepper':119,'celery':40,'chicken breast':174,'chicken thigh':130,
     'ladyfinger':11,'cookie':16,
   };
+  // Items that should never be countable despite keyword matches
+  const NEVER_COUNTABLE = ['tomato paste','tomato sauce','tomato puree',
+    'eggplant','sun-dried tomato','sundried tomato','sweet potato',
+    'potato starch','potato flour','onion powder','onion flake',
+    'garlic powder','garlic sauce','carrot cake'];
   let unitFixed = 0;
   Object.values(bank).forEach(entry => {
     if (entry.overridden) return;
     const n = entry.name.toLowerCase();
     // Fix volume items
-    if (entry.unitType === 'weight' && VOLUME_INGREDIENTS.some(v => n.includes(v))) {
+    if (entry.unitType === 'weight' && VOLUME_INGREDIENTS.some(v => n.includes(v))
+        && !NEVER_VOLUME.some(x => n.includes(x))) {
       entry.unitType = 'volume'; unitFixed++;
     }
     // Fix countable items that got 'weight'
     const countMatch = Object.entries(COUNTABLE_FIXES)
       .sort((a,b) => b[0].length - a[0].length)
-      .find(([k]) => n === k || n.includes(k));
-    if (countMatch && entry.unitType !== 'countable') {
+      .find(([k]) => n === k || n === k+'s' || n.startsWith(k+' ') || n.endsWith(' '+k) || n.includes(' '+k+' '));
+    if (countMatch && entry.unitType !== 'countable' && !NEVER_COUNTABLE.some(x => n.includes(x))) {
       entry.unitType = 'countable';
       if (!entry.stdWeight) entry.stdWeight = countMatch[1];
       unitFixed++;
@@ -2921,6 +2984,7 @@ function skipNameReview() {
 // Pre-populate bank with common ingredients on first load
 prePopulateBank();
 fixBankCategories();
+migrateLegacyCategories();
 renderLibrary();
 (async () => {
   if (recipes.length > 0) {
