@@ -2455,10 +2455,18 @@ async function populateBankFromIngredients(ingredients) {
   }
 }
 
-async function recalcAllRecipesFromBank() {
-  const allIngs = [];
-  recipes.forEach(r => (r.ingredients||[]).forEach(ing => { if(ing.item&&!bank[bankKey(ing.item)]) allIngs.push(ing); }));
-  if (allIngs.length) await populateBankFromIngredients(allIngs);
+async function recalcAllRecipesFromBank(fetchMissing=true) {
+  // Only fetch missing ingredients when explicitly requested (e.g. on init or recipe save)
+  // NOT after a merge/delete, to avoid re-creating intentionally removed entries
+  if (fetchMissing) {
+    const seen = new Set();
+    const toFetch = [];
+    recipes.forEach(r => (r.ingredients||[]).forEach(ing => {
+      const k = bankKey(ing.item);
+      if (ing.item && !bank[k] && !seen.has(k)) { seen.add(k); toFetch.push(ing); }
+    }));
+    if (toFetch.length) await populateBankFromIngredients(toFetch);
+  }
   let changed = false;
   recipes.forEach((r,idx) => {
     const newIngs = (r.ingredients||[]).map(ing => ({...ing,...calcIngMacrosFromBank(ing)}));
@@ -2593,7 +2601,11 @@ function openBankEdit(name) {
     `<option value="${cat}" ${(e.category||'Other')===cat?'selected':''}>${CATEGORY_ICONS[cat]||''} ${cat}</option>`
   ).join('');
   showModal('bank-edit-modal', `
-    <div class="modal-title">Edit: ${e.displayName||e.name}</div>
+    <div class="modal-title">Edit ingredient</div>
+    <div class="modal-field" style="margin-bottom:12px;">
+      <label>Name</label>
+      <input id="be-name" type="text" value="${(e.displayName||e.name).replace(/"/g,'&quot;')}" style="font-weight:500;"/>
+    </div>
     <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">USDA match: <strong>${e.usdaMatch||'None'}</strong></div>
     <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);margin-bottom:8px;">Macros per 100g</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
@@ -2631,17 +2643,54 @@ function beSelectUnit(type,el){
 }
 
 function saveBankEdit(name) {
-  const e=bank[name]; if(!e) return;
-  e.cal=parseFloat(document.getElementById('be-cal').value)||0;
-  e.protein=parseFloat(document.getElementById('be-pro').value)||0;
-  e.carbs=parseFloat(document.getElementById('be-carb').value)||0;
-  e.fat=parseFloat(document.getElementById('be-fat').value)||0;
-  e.unitType=window._beUnitType;
-  e.stdWeight=e.unitType==='countable'?(parseFloat(document.getElementById('be-stdw').value)||null):null;
-  e.category=document.getElementById('be-cat')?.value||e.category||'Other';
-  e.overridden=true;
-  persistBank(); closeModal('bank-edit-modal'); renderBank();
-  recalcAllRecipesFromBank().then(()=>renderLibrary());
+  const e = bank[name]; if (!e) return;
+
+  // Check if name changed
+  const newDisplayName = (document.getElementById('be-name')?.value || '').trim();
+  const newKey = bankKey(newDisplayName || name);
+  const oldKey = bankKey(name);
+  const nameChanged = newDisplayName && newKey !== oldKey;
+
+  // Collision check — new name already exists as a different entry
+  if (nameChanged && bank[newKey]) {
+    if (!confirm('"' + newDisplayName + '" already exists. Merge into it instead?')) return;
+    // Redirect all recipes using old name to the existing entry
+    recipes.forEach(r => (r.ingredients||[]).forEach(ing => {
+      if (bankKey(ing.item) === oldKey) ing.item = bank[newKey].displayName || newDisplayName;
+    }));
+    delete bank[oldKey];
+    persistBank(); persist();
+    closeModal('bank-edit-modal'); renderBank();
+    recalcAllRecipesFromBank(false).then(()=>renderLibrary());
+    return;
+  }
+
+  // Update macros and metadata on the entry
+  e.cal = parseFloat(document.getElementById('be-cal').value)||0;
+  e.protein = parseFloat(document.getElementById('be-pro').value)||0;
+  e.carbs = parseFloat(document.getElementById('be-carb').value)||0;
+  e.fat = parseFloat(document.getElementById('be-fat').value)||0;
+  e.unitType = window._beUnitType;
+  e.stdWeight = e.unitType==='countable' ? (parseFloat(document.getElementById('be-stdw').value)||null) : null;
+  e.category = document.getElementById('be-cat')?.value || e.category || 'Other';
+  e.overridden = true;
+
+  if (nameChanged) {
+    e.name = newKey;
+    e.displayName = newDisplayName;
+    bank[newKey] = e;
+    delete bank[oldKey];
+    // Update all recipes using old name
+    recipes.forEach(r => (r.ingredients||[]).forEach(ing => {
+      if (bankKey(ing.item) === oldKey) ing.item = newDisplayName;
+    }));
+    persist();
+  }
+
+  persistBank();
+  closeModal('bank-edit-modal');
+  renderBank();
+  recalcAllRecipesFromBank(false).then(()=>renderLibrary());
 }
 
 async function refetchBankEntry(name) {
@@ -2769,6 +2818,8 @@ function confirmDeleteBankEntry(name) {
   persistBank();
   closeModal('bank-delete-modal');
   renderBank();
+  // Recalc without re-fetching so deleted entry doesn't come back
+  recalcAllRecipesFromBank(false).then(()=>renderLibrary());
 }
 
 // ── Merge duplicates ───────────────────────────────────────────────────────
@@ -2833,7 +2884,9 @@ function executeMerge(keepName, allNames) {
     delete bank[name];
   });
   persistBank();persist();bankMergeMode=false;bankMergeSelected.clear();
-  closeModal('merge-modal');renderBank();recalcAllRecipesFromBank().then(()=>renderLibrary());
+  closeModal('merge-modal');renderBank();
+  // Pass false so deleted entries are not re-fetched from USDA
+  recalcAllRecipesFromBank(false).then(()=>renderLibrary());
 }
 
 // ── Extend showPage for new pages ──────────────────────────────────────────
