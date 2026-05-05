@@ -1425,6 +1425,85 @@ function renderMPDayPanel(dk, wk) {
 }
 
 // ── Meal Plan Modal ────────────────────────────────────────────────────────
+
+// ── Unit conversion for meal plan ingredient entries ──────────────────────
+const MP_UNITS_WEIGHT    = ['g','oz','lb','kg'];
+const MP_UNITS_VOLUME    = ['cup','tbsp','tsp','ml','fl oz'];
+const MP_UNITS_COUNTABLE = ['piece','whole','each','slice'];
+
+function getMPUnitsForEntry(bankEntry) {
+  if (!bankEntry) return [...MP_UNITS_WEIGHT, ...MP_UNITS_VOLUME, ...MP_UNITS_COUNTABLE];
+  switch (bankEntry.unitType) {
+    case 'countable': return [...MP_UNITS_COUNTABLE, ...MP_UNITS_WEIGHT];
+    case 'volume':    return [...MP_UNITS_VOLUME, ...MP_UNITS_WEIGHT];
+    default:          return [...MP_UNITS_WEIGHT, ...MP_UNITS_VOLUME];
+  }
+}
+
+function getDefaultUnit(bankEntry) {
+  if (!bankEntry) return 'g';
+  switch (bankEntry.unitType) {
+    case 'countable': return bankEntry.stdWeight ? 'piece' : 'g';
+    case 'volume':    return 'cup';
+    default:          return 'g';
+  }
+}
+
+function mpIngGrams(amount, unit, bankEntry) {
+  const qty = parseFloat(amount) || 0;
+  if (!qty) return 0;
+  const TO_G = { g:1, oz:28.3495, lb:453.592, kg:1000,
+    cup:240, tbsp:14.787, tsp:4.929, ml:1, 'fl oz':29.574 };
+  if (unit === 'piece' || unit === 'whole' || unit === 'each' || unit === 'slice') {
+    return qty * (bankEntry?.stdWeight || 100);
+  }
+  let grams = qty * (TO_G[unit] || 1);
+  // Apply liquid density for volume units
+  if (['cup','tbsp','tsp','ml','fl oz'].includes(unit) && bankEntry) {
+    const n = (bankEntry.name || '').toLowerCase();
+    const FE_LIQUID_DENSITY = {
+      milk:1.03, cream:1.01, 'heavy cream':1.01, 'sour cream':0.96,
+      yogurt:1.04, oil:0.92, 'olive oil':0.92, 'coconut oil':0.92,
+      butter:0.91, honey:1.42, 'maple syrup':1.32, water:1.0,
+      broth:1.0, 'soy sauce':1.18, 'coconut milk':1.02,
+    };
+    const FE_DRY_CUP_DENSITY = {
+      flour:125, 'all-purpose flour':125, sugar:200, 'brown sugar':220,
+      oats:90, rice:185, breadcrumbs:108, 'cocoa powder':85,
+      'powdered sugar':120, cornstarch:128, quinoa:170,
+    };
+    const dryMatch = Object.entries(FE_DRY_CUP_DENSITY)
+      .sort((a,b)=>b[0].length-a[0].length)
+      .find(([k])=>n.includes(k));
+    if (dryMatch) {
+      // dry: per-cup weight
+      const gpc = dryMatch[1];
+      if (unit==='cup') grams = qty * gpc;
+      else if (unit==='tbsp') grams = qty * gpc/16;
+      else if (unit==='tsp') grams = qty * gpc/48;
+    } else {
+      const liqMatch = Object.entries(FE_LIQUID_DENSITY)
+        .sort((a,b)=>b[0].length-a[0].length)
+        .find(([k])=>n.includes(k));
+      if (liqMatch) grams *= liqMatch[1];
+    }
+  }
+  return grams;
+}
+
+function mpIngMacros(amount, unit, bankEntry) {
+  if (!bankEntry || bankEntry.cal == null) return null;
+  const grams = mpIngGrams(amount, unit, bankEntry);
+  if (!grams) return null;
+  const scale = grams / 100;
+  return {
+    cal: Math.round(bankEntry.cal * scale),
+    protein: parseFloat((bankEntry.protein * scale).toFixed(1)),
+    carbs: parseFloat((bankEntry.carbs * scale).toFixed(1)),
+    fat: parseFloat((bankEntry.fat * scale).toFixed(1)),
+  };
+}
+
 function mpOpenAddModal(wk, dk, slot, editIdx) {
   const existingEntry = editIdx!=null ? ((mealPlan[wk]?.[dk]?.[slot])||[])[editIdx] : null;
   const wkProfiles = getMPWeekProfiles();
@@ -1451,13 +1530,37 @@ function mpOpenAddModal(wk, dk, slot, editIdx) {
       <button id="mp-tab-ingredient" class="unit-tab${mpTab==='ingredient'?' active':''}" onclick="mpSwitchTab('ingredient')">Ingredient</button>
     </div>
     <div id="mp-tab-content"></div>
-    <div class="modal-field" style="margin-top:10px;"><label>Servings / Amount</label><input type="number" id="mp-servings" min="0.5" step="0.5" value="${selServings}"/></div>
+    <div class="modal-field" style="margin-top:10px;" id="mp-amount-row">
+      <label id="mp-amount-label">Servings</label>
+      <div style="display:flex;gap:8px;">
+        <input type="number" id="mp-servings" min="0.01" step="0.5" value="${selServings}" style="flex:2;"/>
+        <select id="mp-unit-select" style="flex:1;padding:7px 8px;border:1px solid var(--border2);border-radius:var(--radius);font-size:13px;font-family:'DM Sans',sans-serif;display:none;" onchange="mpUpdateIngUnit(this.value)"></select>
+      </div>
+    </div>
     ${wkProfiles.length>1?`<div class="modal-field"><label>Who's eating</label><div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px;" id="mp-eaters">${whoHtml}</div></div>`:''}
     <div class="btn-row" style="margin-top:14px;">
       <button class="btn btn-primary" onclick="mpConfirmEntry()">Save</button>
       <button class="btn btn-secondary" onclick="closeModal('mp-add-modal')">Cancel</button>
     </div>`);
   mpSwitchTab(mpTab);
+}
+
+function mpRefreshUnitSelect() {
+  const sel = document.getElementById('mp-unit-select');
+  const lbl = document.getElementById('mp-amount-label');
+  const m = window._mpModal;
+  if (!sel || !lbl) return;
+  if (m.tab === 'ingredient' && m.selBankKey) {
+    const bEntry = bank[m.selBankKey];
+    const units = getMPUnitsForEntry(bEntry);
+    const cur = m.selUnit || getDefaultUnit(bEntry);
+    sel.innerHTML = units.map(u=>`<option value="${u}" ${u===cur?'selected':''}>${u}</option>`).join('');
+    sel.style.display = 'block';
+    lbl.textContent = 'Amount';
+  } else {
+    sel.style.display = 'none';
+    lbl.textContent = m.tab === 'recipe' ? 'Servings' : 'Servings / Amount';
+  }
 }
 
 function mpSwitchTab(tab) {
@@ -1467,6 +1570,7 @@ function mpSwitchTab(tab) {
   const content = document.getElementById('mp-tab-content');
   if (!content) return;
 
+  setTimeout(mpRefreshUnitSelect, 10);
   if (tab === 'recipe') {
     // Group recipes by category
     const cats = {};
@@ -1499,13 +1603,20 @@ function mpSwitchTab(tab) {
     const rows = entries.map(e=>`<div onclick="mpPickIngredient('${e.name}',this)" data-key="${e.name}"
       style="padding:8px 10px;border:1px solid ${selBankKey===e.name?'var(--text)':'var(--border)'};border-radius:var(--radius);cursor:pointer;background:${selBankKey===e.name?'var(--surface2)':'#fff'};font-size:13px;margin-bottom:4px;">
       <div style="font-weight:500;">${e.displayName||e.name}</div>
-      <div style="font-size:11px;color:var(--text3);">${e.cal!=null?Math.round(e.cal)+' cal/100g':''} · ${e.unitType||'weight'}</div>
+      <div style="font-size:11px;color:var(--text3);">${e.cal!=null?Math.round(e.cal)+' cal/100g':''} · ${e.unitType||'weight'}${e.stdWeight?' · '+e.stdWeight+'g each':''}</div>
     </div>`).join('');
+    // Build unit dropdown for currently selected ingredient
+    const selEntry = selBankKey ? bank[selBankKey] : null;
+    const selUnit = window._mpModal.selUnit || getDefaultUnit(selEntry);
+    const unitOpts = getMPUnitsForEntry(selEntry).map(u=>`<option value="${u}" ${u===selUnit?'selected':''}>${u}</option>`).join('');
     content.innerHTML = `
       <input type="text" placeholder="Search ingredient bank…" oninput="mpFilterIngredients(this.value)"
         style="width:100%;padding:7px 10px;border:1px solid var(--border2);border-radius:var(--radius);font-size:13px;font-family:'DM Sans',sans-serif;margin-bottom:10px;box-sizing:border-box;"/>
-      <div id="mp-ing-list" style="max-height:220px;overflow-y:auto;">${entries.length?rows:'<p style="font-size:13px;color:var(--text3);">No ingredients in bank yet.</p>'}</div>
-      <div style="font-size:11px;color:var(--text3);margin-top:6px;">Enter amount in the Servings field (e.g. 1 for 1 piece, or grams for weight items).</div>`;
+      <div id="mp-ing-list" style="max-height:180px;overflow-y:auto;">${entries.length?rows:'<p style="font-size:13px;color:var(--text3);">No ingredients in bank yet.</p>'}</div>
+      ${selEntry?`<div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+        <label style="font-size:12px;color:var(--text2);white-space:nowrap;">Unit:</label>
+        <select id="mp-ing-unit" onchange="mpUpdateIngUnit(this.value)" style="flex:1;padding:6px 8px;border:1px solid var(--border2);border-radius:var(--radius);font-size:13px;font-family:'DM Sans',sans-serif;">${unitOpts}</select>
+      </div>`:''}`;
   }
 }
 
@@ -1540,8 +1651,30 @@ function mpFilterIngredients(q) {
 function mpPickIngredient(key, el) {
   window._mpModal.selBankKey = key;
   window._mpModal.selId = null;
+  const bEntry = bank[key];
+  window._mpModal.selUnit = getDefaultUnit(bEntry);
   document.querySelectorAll('#mp-ing-list > div').forEach(e=>{e.style.borderColor='var(--border)';e.style.background='#fff';});
   el.style.borderColor='var(--text)'; el.style.background='var(--surface2)';
+  // Refresh unit dropdown
+  const selEntry = bEntry;
+  const unitOpts = getMPUnitsForEntry(selEntry).map(u=>`<option value="${u}" ${u===window._mpModal.selUnit?'selected':''}>${u}</option>`).join('');
+  const content = document.getElementById('mp-tab-content');
+  // Add/update unit row
+  let unitRow = content?.querySelector('#mp-unit-row');
+  if (!unitRow && content) {
+    const div = document.createElement('div');
+    div.id = 'mp-unit-row';
+    div.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:8px;';
+    div.innerHTML = `<label style="font-size:12px;color:var(--text2);white-space:nowrap;">Unit:</label><select id="mp-ing-unit" onchange="mpUpdateIngUnit(this.value)" style="flex:1;padding:6px 8px;border:1px solid var(--border2);border-radius:var(--radius);font-size:13px;font-family:'DM Sans',sans-serif;">${unitOpts}</select>`;
+    content.appendChild(div);
+  } else if (unitRow) {
+    unitRow.querySelector('select').innerHTML = unitOpts;
+  }
+  mpRefreshUnitSelect();
+}
+
+function mpUpdateIngUnit(unit) {
+  window._mpModal.selUnit = unit;
 }
 
 
@@ -1572,9 +1705,21 @@ function mpConfirmEntry() {
   if (m.selId) {
     entry = {recipeId:m.selId, servings, eatingProfiles:[...eaters]};
   } else {
-    // Ingredient bank entry
+    // Ingredient bank entry with unit
     const bEntry = bank[m.selBankKey];
-    entry = {bankKey:m.selBankKey, bankName:bEntry?.displayName||m.selBankKey, servings, eatingProfiles:[...eaters]};
+    const unit = m.selUnit || getDefaultUnit(bEntry) || 'g';
+    const macros = mpIngMacros(servings, unit, bEntry);
+    entry = {
+      bankKey: m.selBankKey,
+      bankName: bEntry?.displayName || m.selBankKey,
+      servings, unit,
+      eatingProfiles: [...eaters],
+      // Pre-computed macros for display (recalculated when editing)
+      cal: macros?.cal || null,
+      protein: macros?.protein || null,
+      carbs: macros?.carbs || null,
+      fat: macros?.fat || null,
+    };
   }
   if (m.editIdx!=null) mealPlan[m.wk][m.dk][m.slot][m.editIdx]=entry;
   else mealPlan[m.wk][m.dk][m.slot].push(entry);
@@ -1692,6 +1837,56 @@ function renderTRWeekGrid(days) {
 }
 
 function trSelectDay(dk) { trActiveDay=dk; renderTRWeekGrid(getWeekDates(trWeekOffset)); renderTRDayPanel(dk); }
+
+
+// ── Macro visualization: donut + gauge bars ────────────────────────────────
+function renderMacroViz(m, goals, profileColor) {
+  const calPct  = Math.min(100, goals.cal   > 0 ? Math.round(m.cal     / goals.cal   * 100) : 0);
+  const proPct  = Math.min(100, goals.protein > 0 ? Math.round(m.protein / goals.protein * 100) : 0);
+  const carbPct = Math.min(100, goals.carbs  > 0 ? Math.round(m.carbs  / goals.carbs  * 100) : 0);
+  const fatPct  = Math.min(100, goals.fat    > 0 ? Math.round(m.fat    / goals.fat    * 100) : 0);
+
+  // SVG donut for calories
+  const R = 44, CX = 56, CY = 56, STROKE = 10;
+  const circumference = 2 * Math.PI * R;
+  const filled = circumference * calPct / 100;
+  const remaining = circumference - filled;
+  const donutSvg = `<svg width="112" height="112" viewBox="0 0 112 112">
+    <circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="var(--border)" stroke-width="${STROKE}"/>
+    <circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${profileColor}" stroke-width="${STROKE}"
+      stroke-dasharray="${filled} ${remaining}" stroke-linecap="round"
+      transform="rotate(-90 ${CX} ${CY})"/>
+    <text x="${CX}" y="${CY - 6}" text-anchor="middle" font-size="18" font-weight="700"
+      font-family="'Lora',serif" fill="var(--text)">${m.cal}</text>
+    <text x="${CX}" y="${CY + 10}" text-anchor="middle" font-size="10"
+      font-family="'DM Sans',sans-serif" fill="var(--text3)">of ${goals.cal}</text>
+    <text x="${CX}" y="${CY + 22}" text-anchor="middle" font-size="9"
+      font-family="'DM Sans',sans-serif" fill="var(--text3)">kcal</text>
+  </svg>`;
+
+  // Gauge bars for protein / carbs / fat
+  const gaugeBar = (label, eaten, goal, pct, color) => `
+    <div style="margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+        <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text2);">${label}</span>
+        <span style="font-size:12px;color:var(--text2);"><strong style="color:var(--text);font-size:14px;">${eaten}g</strong> / ${goal}g</span>
+      </div>
+      <div style="height:7px;background:var(--border);border-radius:99px;overflow:hidden;">
+        <div style="height:7px;width:${pct}%;background:${color};border-radius:99px;transition:width 0.4s;"></div>
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-top:2px;text-align:right;">${pct}%</div>
+    </div>`;
+
+  const bars = `
+    ${gaugeBar('Protein', m.protein, goals.protein, proPct, '#2c7a52')}
+    ${gaugeBar('Carbs',   m.carbs,   goals.carbs,   carbPct, '#c87533')}
+    ${gaugeBar('Fat',     m.fat,     goals.fat,     fatPct,  '#5a7ab0')}`;
+
+  return `<div style="display:flex;gap:16px;align-items:center;background:var(--bg);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:14px;">
+    <div style="flex-shrink:0;">${donutSvg}</div>
+    <div style="flex:1;min-width:0;">${bars}</div>
+  </div>`;
+}
 
 
 // ── Auto-log scheduled meals for a day ────────────────────────────────────
@@ -1812,13 +2007,7 @@ function renderTRDayPanel(dk) {
       <div style="font-family:'Lora',serif;font-size:19px;letter-spacing:-0.01em;">${title}</div>
       <span style="padding:3px 10px;border-radius:99px;font-size:12px;font-weight:600;background:${p.color};color:#fff;">${p.name}</span>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">
-      <div style="background:var(--bg);border-radius:var(--radius);padding:9px;text-align:center;"><span style="font-size:16px;font-weight:700;display:block;color:var(--accent);">${m.cal}</span><div style="font-size:9px;color:var(--text3);margin-top:2px;">of ${goals.cal}</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);">kcal</div></div>
-      <div style="background:var(--bg);border-radius:var(--radius);padding:9px;text-align:center;"><span style="font-size:16px;font-weight:700;display:block;color:var(--accent2);">${m.protein}g</span><div style="font-size:9px;color:var(--text3);margin-top:2px;">of ${goals.protein}g</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);">protein</div></div>
-      <div style="background:var(--bg);border-radius:var(--radius);padding:9px;text-align:center;"><span style="font-size:16px;font-weight:700;display:block;">${m.carbs}g</span><div style="font-size:9px;color:var(--text3);margin-top:2px;">of ${goals.carbs}g</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);">carbs</div></div>
-      <div style="background:var(--bg);border-radius:var(--radius);padding:9px;text-align:center;"><span style="font-size:16px;font-weight:700;display:block;">${m.fat}g</span><div style="font-size:9px;color:var(--text3);margin-top:2px;">of ${goals.fat}g</div><div style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);">fat</div></div>
-    </div>
-    ${bar(m.cal, goals.cal, p.color)}
+    ${renderMacroViz(m, goals, p.color)}
     ${emptyHtml}
     ${slotsHtml}
     ${extrasHtml}
