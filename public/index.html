@@ -2107,14 +2107,53 @@ function trConfirmCustom() {
 }
 
 function trEditEntry(dk,pid,idx) {
-  const e=getTRDay(dk,pid)[idx]; if(!e) return;
+  const e = getTRDay(dk,pid)[idx]; if (!e) return;
   if (e.isCustom) {
-    trOpenCustomModal(dk,pid,idx);
-  } else {
-    // Open edit modal — on save, autoLogged will be cleared
-    window._trLog={dk,pid,selId:e.recipeId,editIdx:idx};
-    trOpenLogModal(dk,pid,{recipeId:e.recipeId,servings:e.servings});
+    trOpenCustomModal(dk, pid, idx);
+    return;
   }
+  // Show inline serving edit modal — edits the existing entry in place
+  const name = e.name || 'item';
+  window._trInlineEdit = {dk, pid, idx};
+  showModal('tr-inline-edit-modal', `
+    <div class="modal-title">Edit servings</div>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">${name}</p>
+    <div class="modal-field">
+      <label>Servings eaten</label>
+      <input type="number" id="tr-inline-srv" min="0" step="0.5" value="${e.servings}" style="font-size:18px;text-align:center;"/>
+    </div>
+    <p style="font-size:11px;color:var(--text3);margin-top:4px;">Enter 0 if you skipped this meal entirely.</p>
+    <div class="btn-row" style="margin-top:14px;">
+      <button class="btn btn-primary" onclick="trConfirmInlineEdit()">Save</button>
+      <button class="btn btn-secondary" onclick="closeModal('tr-inline-edit-modal')">Cancel</button>
+    </div>`);
+}
+
+function trConfirmInlineEdit() {
+  const {dk, pid, idx} = window._trInlineEdit;
+  const newServings = parseFloat(document.getElementById('tr-inline-srv').value);
+  if (isNaN(newServings) || newServings < 0) { alert('Please enter a valid amount.'); return; }
+  const list = getTRDay(dk, pid);
+  const entry = list[idx]; if (!entry) return;
+
+  if (newServings === 0) {
+    // Remove the entry entirely
+    list.splice(idx, 1);
+  } else {
+    // Recalculate macros based on new servings
+    const oldServings = entry.servings || 1;
+    const scale = newServings / oldServings;
+    entry.servings = newServings;
+    entry.cal = Math.round((entry.cal || 0) * scale);
+    entry.protein = parseFloat(((entry.protein || 0) * scale).toFixed(1));
+    entry.carbs = parseFloat(((entry.carbs || 0) * scale).toFixed(1));
+    entry.fat = parseFloat(((entry.fat || 0) * scale).toFixed(1));
+    entry.autoLogged = false; // mark as manually edited
+  }
+  persistTR();
+  closeModal('tr-inline-edit-modal');
+  renderTRDayPanel(dk);
+  renderTRWeekGrid(getWeekDates(trWeekOffset));
 }
 
 function trRemoveEntry(dk,pid,idx) {
@@ -2460,6 +2499,123 @@ const PREPOPULATED_INGREDIENTS = [
   { name:'lentil',             cal:353, protein:25,   carbs:60,   fat:1.1,  stdWeight:null,unitType:'weight',    cat:'Tofu & Legumes',    usdaMatch:'Lentils, raw' },
   { name:'black bean',         cal:341, protein:22,   carbs:63,   fat:1.4,  stdWeight:null,unitType:'weight',    cat:'Tofu & Legumes',    usdaMatch:'Beans, black, mature seeds, raw' },
   { name:'edamame',            cal:121, protein:11,   carbs:9,    fat:5.2,  stdWeight:null,unitType:'weight',    cat:'Tofu & Legumes',    usdaMatch:'Edamame, frozen, prepared' },
+  // ── FitForFilms PDF ingredients (UK food composition tables) ──
+  { name:'lean minced beef', cal:125, protein:22, fat:4.2, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'minced beef', cal:225, protein:19.7, fat:16.2, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'beef rump steak', cal:125, protein:22, fat:4.1, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'beef sirloin steak', cal:134, protein:23, fat:4.5, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'beef stewing steak', cal:146, protein:22, fat:6.4, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'chicken light meat', cal:106, protein:24, fat:1.1, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'chicken dark meat', cal:109, protein:20.9, fat:2.8, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'lean minced lamb', cal:156, protein:19.1, fat:8.8, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'minced lamb', cal:196, protein:19.1, fat:13.3, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'lamb breast', cal:287, protein:16, fat:25, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'lamb neck', cal:203, protein:19.4, fat:13.9, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'turkey light meat', cal:105, protein:24.4, fat:0.8, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'turkey dark meat', cal:104, protein:20.4, fat:2.5, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'pork loin steak', cal:225, protein:19.9, fat:16.1, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'pork ribs', cal:195, protein:18.7, fat:13.4, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'minced pork', cal:164, protein:19.2, fat:9.7, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'streaky bacon', cal:276, protein:15.8, fat:23.6, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'duck breast', cal:137, protein:19.7, fat:6.5, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'venison', cal:103, protein:22.2, fat:1.6, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'pheasant', cal:144, protein:24.4, fat:3.3, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'cod', cal:75, protein:17.5, fat:0.6, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'cod smoked', cal:79, protein:18.3, fat:0.6, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'haddock', cal:75, protein:17.8, fat:0.4, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'hake', cal:92, protein:18, fat:2.2, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'halibut', cal:103, protein:21.5, fat:1.9, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'monkfish', cal:66, protein:15.7, fat:0.4, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'plaice', cal:76, protein:16.4, fat:1.2, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'sole', cal:73, protein:16.7, fat:0.7, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'wild trout', cal:116, protein:20.8, fat:3.6, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'wild salmon', cal:179, protein:22.1, fat:10.1, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'lobster', cal:77, protein:17, fat:1, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'mussel', cal:74, protein:12.1, fat:1.8, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'oyster', cal:66, protein:10.8, fat:1.3, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'prawn', cal:77, protein:17.6, fat:0.7, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'scallop', cal:88, protein:17, fat:1, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'squid', cal:77, protein:15.4, fat:1.7, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'duck egg', cal:163, protein:14, fat:12, carbs:0, stdWeight:75, unitType:'countable', cat:'Dairy & Eggs', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'collagen powder', cal:358, protein:91.6, fat:0, carbs:0, stdWeight:null, unitType:'weight', cat:'Baking', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'pea protein', cal:366, protein:66, fat:5, carbs:10, stdWeight:null, unitType:'weight', cat:'Baking', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'rice protein', cal:354, protein:77.4, fat:0, carbs:9.6, stdWeight:null, unitType:'weight', cat:'Baking', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'whey protein isolate', cal:379, protein:90, fat:1.5, carbs:1.4, stdWeight:null, unitType:'weight', cat:'Baking', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'whey protein concentrate', cal:402, protein:78, fat:6.8, carbs:6.1, stdWeight:null, unitType:'weight', cat:'Baking', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'beef broth', cal:111, protein:7.8, fat:3.5, carbs:0, stdWeight:null, unitType:'volume', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'amaranth', cal:102, protein:14, fat:7, carbs:59, stdWeight:null, unitType:'weight', cat:'Grains & Starches', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'red kidney beans', cal:295, protein:22, fat:1.4, carbs:41, stdWeight:null, unitType:'weight', cat:'Tofu & Legumes', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'buckwheat', cal:362, protein:8.1, fat:1.5, carbs:77, stdWeight:null, unitType:'weight', cat:'Grains & Starches', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'millet', cal:345, protein:12, fat:3.9, carbs:64, stdWeight:null, unitType:'weight', cat:'Grains & Starches', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'brown rice', cal:354, protein:9.3, fat:3.1, carbs:71, stdWeight:null, unitType:'weight', cat:'Grains & Starches', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'rye', cal:363, protein:10, fat:1.6, carbs:69, stdWeight:null, unitType:'weight', cat:'Grains & Starches', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'beetroot', cal:45, protein:1.7, fat:0, carbs:7.2, stdWeight:null, unitType:'weight', cat:'Vegetables', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'parsnip', cal:73, protein:1.8, fat:1.1, carbs:12, stdWeight:null, unitType:'weight', cat:'Vegetables', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'squash', cal:41, protein:1.1, fat:0, carbs:7.9, stdWeight:null, unitType:'weight', cat:'Vegetables', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'turnip', cal:30, protein:0.9, fat:0, carbs:3.7, stdWeight:null, unitType:'weight', cat:'Vegetables', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'yam', cal:119, protein:1.6, fat:0, carbs:26, stdWeight:null, unitType:'weight', cat:'Vegetables', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'apricot', cal:36, protein:1.5, fat:0, carbs:12, stdWeight:35, unitType:'countable', cat:'Fruits', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'blackberry', cal:43, protein:1.1, fat:0, carbs:6.1, stdWeight:null, unitType:'weight', cat:'Fruits', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'cherry', cal:56, protein:0.9, fat:0, carbs:12, stdWeight:null, unitType:'weight', cat:'Fruits', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'coconut', cal:378, protein:3.8, fat:36, carbs:3.5, stdWeight:null, unitType:'weight', cat:'Fruits', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'date', cal:295, protein:3.3, fat:0, carbs:68, stdWeight:null, unitType:'weight', cat:'Fruits', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'grape', cal:74, protein:0.6, fat:0, carbs:16, stdWeight:null, unitType:'weight', cat:'Fruits', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'grapefruit', cal:38, protein:0.8, fat:0, carbs:6.7, stdWeight:230, unitType:'countable', cat:'Fruits', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'kiwi', cal:59, protein:1.1, fat:0.5, carbs:11, stdWeight:76, unitType:'countable', cat:'Fruits', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'lychee', cal:64, protein:0.9, fat:0, carbs:14, stdWeight:null, unitType:'weight', cat:'Fruits', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'melon', cal:33, protein:0, fat:0, carbs:6.9, stdWeight:null, unitType:'weight', cat:'Fruits', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'nectarine', cal:48, protein:1.4, fat:0, carbs:8.7, stdWeight:110, unitType:'countable', cat:'Fruits', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'passionfruit', cal:57, protein:2.8, fat:0, carbs:5.7, stdWeight:30, unitType:'countable', cat:'Fruits', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'peach', cal:41, protein:1, fat:0, carbs:7.4, stdWeight:110, unitType:'countable', cat:'Fruits', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'pear', cal:52, protein:0, fat:0, carbs:11, stdWeight:160, unitType:'countable', cat:'Fruits', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'persimmon', cal:71, protein:0.6, fat:0, carbs:15, stdWeight:168, unitType:'countable', cat:'Fruits', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'plum', cal:46, protein:0.6, fat:0, carbs:8.7, stdWeight:85, unitType:'countable', cat:'Fruits', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'pineapple', cal:50, protein:0, fat:0, carbs:9.9, stdWeight:null, unitType:'weight', cat:'Fruits', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'raspberry', cal:46, protein:1.4, fat:0, carbs:4.6, stdWeight:null, unitType:'weight', cat:'Fruits', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'satsuma', cal:49, protein:0.7, fat:0, carbs:9.3, stdWeight:80, unitType:'countable', cat:'Fruits', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'sultana', cal:300, protein:2.7, fat:0, carbs:69, stdWeight:null, unitType:'weight', cat:'Fruits', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'artichoke', cal:29, protein:2.8, fat:0, carbs:2.7, stdWeight:null, unitType:'weight', cat:'Vegetables', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'asparagus', cal:32, protein:2.9, fat:0.6, carbs:2, stdWeight:null, unitType:'weight', cat:'Vegetables', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'aubergine', cal:24, protein:0.9, fat:0, carbs:2.2, stdWeight:null, unitType:'weight', cat:'Vegetables', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'bamboo shoot', cal:27, protein:1.5, fat:0, carbs:0.7, stdWeight:null, unitType:'weight', cat:'Vegetables', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'cabbage', cal:37, protein:1.8, fat:0, carbs:4.4, stdWeight:null, unitType:'weight', cat:'Vegetables', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'cauliflower', cal:38, protein:2.5, fat:0, carbs:4.4, stdWeight:null, unitType:'weight', cat:'Vegetables', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'courgette', cal:26, protein:1.8, fat:0, carbs:1.8, stdWeight:null, unitType:'weight', cat:'Vegetables', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'fennel', cal:23, protein:0.9, fat:0, carbs:1.9, stdWeight:null, unitType:'weight', cat:'Vegetables', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'green bean', cal:34, protein:2.1, fat:0, carbs:3, stdWeight:null, unitType:'weight', cat:'Vegetables', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'kale', cal:45, protein:3.4, fat:1.6, carbs:1.4, stdWeight:null, unitType:'weight', cat:'Vegetables', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'leek', cal:31, protein:1.6, fat:0.5, carbs:2.9, stdWeight:null, unitType:'weight', cat:'Vegetables', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'mangetout', cal:41, protein:3.6, fat:0, carbs:4.1, stdWeight:null, unitType:'weight', cat:'Vegetables', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'okra', cal:43, protein:2.5, fat:1, carbs:2.9, stdWeight:null, unitType:'weight', cat:'Vegetables', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'pea', cal:82, protein:5.3, fat:0.7, carbs:10, stdWeight:null, unitType:'weight', cat:'Vegetables', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'radish', cal:14, protein:0.7, fat:0, carbs:1.9, stdWeight:null, unitType:'weight', cat:'Vegetables', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'runner bean', cal:26, protein:1.6, fat:0, carbs:3.1, stdWeight:null, unitType:'weight', cat:'Vegetables', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'ghee', cal:883, protein:0, fat:98, carbs:0, stdWeight:null, unitType:'volume', cat:'Oils & Fats', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'feta cheese', cal:253, protein:15, fat:20, carbs:1.4, stdWeight:null, unitType:'weight', cat:'Dairy & Eggs', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'coconut yoghurt', cal:219, protein:2.5, fat:21, carbs:3.9, stdWeight:null, unitType:'weight', cat:'Dairy & Eggs', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'brazil nut', cal:711, protein:16, fat:68, carbs:2.9, stdWeight:null, unitType:'weight', cat:'Nuts & Seeds', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'macadamia nut', cal:762, protein:7.9, fat:78, carbs:4.5, stdWeight:null, unitType:'weight', cat:'Nuts & Seeds', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'olive', cal:114, protein:0.9, fat:11, carbs:0, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'plain yoghurt', cal:84, protein:5.6, fat:3, carbs:7.6, stdWeight:null, unitType:'weight', cat:'Dairy & Eggs', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'dried basil', cal:266, protein:14, fat:4, carbs:43, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'dried dill', cal:311, protein:20, fat:4.4, carbs:41, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'dried marjoram', cal:284, protein:13, fat:7, carbs:43, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'dried mint', cal:279, protein:25, fat:4.6, carbs:35, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'dried oregano', cal:257, protein:9, fat:4.3, carbs:24, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'dried parsley', cal:273, protein:16, fat:7, carbs:14, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'dried rosemary', cal:755, protein:0, fat:77, carbs:15, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'dried sage', cal:312, protein:11, fat:13, carbs:39, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'dried thyme', cal:358, protein:9.1, fat:7.4, carbs:45, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'cayenne pepper', cal:330, protein:12, fat:17, carbs:32, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'dried chilli', cal:312, protein:14, fat:14, carbs:15, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'coriander powder', cal:359, protein:12, fat:18, carbs:16, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'dried ginger', cal:313, protein:7.4, fat:3.3, carbs:56, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'paprika', cal:316, protein:14, fat:13, carbs:18, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'turmeric', cal:404, protein:6.7, fat:7, carbs:67, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'kefir', cal:58, protein:6.1, fat:2, carbs:3.4, stdWeight:null, unitType:'volume', cat:'Dairy & Eggs', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'kimchi', cal:22, protein:1.1, fat:0.5, carbs:2.4, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'kombucha', cal:13, protein:0, fat:0, carbs:3.1, stdWeight:null, unitType:'volume', cat:'Beverages', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'sauerkraut', cal:13, protein:1.1, fat:0, carbs:1.1, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
 ];
 
 function migrateLegacyCategories() {
