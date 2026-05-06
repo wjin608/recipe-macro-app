@@ -208,10 +208,11 @@ h1,h2,h3{font-family:'Lora',serif;}
 .bank-search:focus{outline:none;border-color:var(--accent3);}
 .bank-table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:14px;}
 .bank-table th{background:var(--surface2);padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);border-bottom:1px solid var(--border);}
+.bank-table th.bank-num{text-align:center;}
 .bank-table td{padding:8px 12px;border-bottom:1px solid var(--border2);vertical-align:middle;}
 .bank-table tbody tr:hover td{background:var(--bg);cursor:pointer;}
 .bank-row-name{font-weight:500;}.bank-row-usda{font-size:11px;color:var(--text3);}
-.bank-num{text-align:right;font-variant-numeric:tabular-nums;}
+.bank-num{text-align:center;font-variant-numeric:tabular-nums;padding-left:4px;padding-right:4px;}
 .ov-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent3);margin-left:5px;vertical-align:middle;}
 .unit-tabs{display:flex;gap:5px;margin-bottom:10px;}
 .unit-tab{padding:4px 10px;border-radius:99px;font-size:12px;cursor:pointer;border:1px solid var(--border2);background:#fff;font-family:'DM Sans',sans-serif;}
@@ -2537,11 +2538,11 @@ const PREPOPULATED_INGREDIENTS = [
   { name:'scallop', cal:88, protein:17, fat:1, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
   { name:'squid', cal:77, protein:15.4, fat:1.7, carbs:0, stdWeight:null, unitType:'weight', cat:'Meat & Seafood', usdaMatch:'FitForFilms/UK food tables' },
   { name:'duck egg', cal:163, protein:14, fat:12, carbs:0, stdWeight:75, unitType:'countable', cat:'Dairy & Eggs', usdaMatch:'FitForFilms/UK food tables' },
-  { name:'collagen powder', cal:358, protein:91.6, fat:0, carbs:0, stdWeight:null, unitType:'weight', cat:'Baking', usdaMatch:'FitForFilms/UK food tables' },
-  { name:'pea protein', cal:366, protein:66, fat:5, carbs:10, stdWeight:null, unitType:'weight', cat:'Baking', usdaMatch:'FitForFilms/UK food tables' },
-  { name:'rice protein', cal:354, protein:77.4, fat:0, carbs:9.6, stdWeight:null, unitType:'weight', cat:'Baking', usdaMatch:'FitForFilms/UK food tables' },
-  { name:'whey protein isolate', cal:379, protein:90, fat:1.5, carbs:1.4, stdWeight:null, unitType:'weight', cat:'Baking', usdaMatch:'FitForFilms/UK food tables' },
-  { name:'whey protein concentrate', cal:402, protein:78, fat:6.8, carbs:6.1, stdWeight:null, unitType:'weight', cat:'Baking', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'collagen powder', cal:358, protein:91.6, fat:0, carbs:0, stdWeight:null, unitType:'weight', cat:'Other', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'pea protein', cal:366, protein:66, fat:5, carbs:10, stdWeight:null, unitType:'weight', cat:'Other', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'rice protein', cal:354, protein:77.4, fat:0, carbs:9.6, stdWeight:null, unitType:'weight', cat:'Other', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'whey protein isolate', cal:379, protein:90, fat:1.5, carbs:1.4, stdWeight:null, unitType:'weight', cat:'Other', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'whey protein concentrate', cal:402, protein:78, fat:6.8, carbs:6.1, stdWeight:null, unitType:'weight', cat:'Other', usdaMatch:'FitForFilms/UK food tables' },
   { name:'beef broth', cal:111, protein:7.8, fat:3.5, carbs:0, stdWeight:null, unitType:'volume', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
   { name:'amaranth', cal:102, protein:14, fat:7, carbs:59, stdWeight:null, unitType:'weight', cat:'Grains & Starches', usdaMatch:'FitForFilms/UK food tables' },
   { name:'red kidney beans', cal:295, protein:22, fat:1.4, carbs:41, stdWeight:null, unitType:'weight', cat:'Tofu & Legumes', usdaMatch:'FitForFilms/UK food tables' },
@@ -2592,7 +2593,7 @@ const PREPOPULATED_INGREDIENTS = [
   { name:'runner bean', cal:26, protein:1.6, fat:0, carbs:3.1, stdWeight:null, unitType:'weight', cat:'Vegetables', usdaMatch:'FitForFilms/UK food tables' },
   { name:'ghee', cal:883, protein:0, fat:98, carbs:0, stdWeight:null, unitType:'volume', cat:'Oils & Fats', usdaMatch:'FitForFilms/UK food tables' },
   { name:'feta cheese', cal:253, protein:15, fat:20, carbs:1.4, stdWeight:null, unitType:'weight', cat:'Dairy & Eggs', usdaMatch:'FitForFilms/UK food tables' },
-  { name:'coconut yoghurt', cal:219, protein:2.5, fat:21, carbs:3.9, stdWeight:null, unitType:'weight', cat:'Dairy & Eggs', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'coconut yogurt', cal:219, protein:2.5, fat:21, carbs:3.9, stdWeight:null, unitType:'weight', cat:'Dairy & Eggs', usdaMatch:'FitForFilms/UK food tables' },
   { name:'brazil nut', cal:711, protein:16, fat:68, carbs:2.9, stdWeight:null, unitType:'weight', cat:'Nuts & Seeds', usdaMatch:'FitForFilms/UK food tables' },
   { name:'macadamia nut', cal:762, protein:7.9, fat:78, carbs:4.5, stdWeight:null, unitType:'weight', cat:'Nuts & Seeds', usdaMatch:'FitForFilms/UK food tables' },
   { name:'olive', cal:114, protein:0.9, fat:11, carbs:0, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
@@ -2603,7 +2604,7 @@ const PREPOPULATED_INGREDIENTS = [
   { name:'dried mint', cal:279, protein:25, fat:4.6, carbs:35, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
   { name:'dried oregano', cal:257, protein:9, fat:4.3, carbs:24, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
   { name:'dried parsley', cal:273, protein:16, fat:7, carbs:14, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
-  { name:'dried rosemary', cal:755, protein:0, fat:77, carbs:15, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
+  { name:'dried rosemary', cal:331, protein:4.9, fat:15.2, carbs:64.1, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
   { name:'dried sage', cal:312, protein:11, fat:13, carbs:39, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
   { name:'dried thyme', cal:358, protein:9.1, fat:7.4, carbs:45, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
   { name:'cayenne pepper', cal:330, protein:12, fat:17, carbs:32, stdWeight:null, unitType:'weight', cat:'Condiments, Sauces & Spices', usdaMatch:'FitForFilms/UK food tables' },
@@ -2631,6 +2632,13 @@ function migrateLegacyCategories() {
     'vegetable oil': 'Oils & Fats',
     'canola oil': 'Oils & Fats',
     'corn oil': 'Oils & Fats',
+    'garlic clove': 'Vegetables',
+    'garlic cloves': 'Vegetables',
+    'collagen powder': 'Other',
+    'pea protein': 'Other',
+    'rice protein': 'Other',
+    'whey protein isolate': 'Other',
+    'whey protein concentrate': 'Other',
   };
   let changed = 0;
   Object.values(bank).forEach(entry => {
@@ -2662,14 +2670,59 @@ function migrateLegacyCategories() {
     'mozzarella':       { unitType: 'weight' },
     'ricotta':          { unitType: 'weight' },
     'parmesan':         { unitType: 'weight' },
+    'vegetable oil':    { unitType: 'volume' },
+    'brewed espresso':  { unitType: 'volume' },
+    // Fix dried rosemary macros (PDF had wrong values)
+    'dried rosemary':   { cal: 331, protein: 4.9, fat: 15.2, carbs: 64.1 },
+    // Rename coconut yoghurt → coconut yogurt
+    'coconut yoghurt':  { displayName: 'Coconut Yogurt' },
+    // Rename Greek yogurt variants for clarity
+    'greek yogurt':     { displayName: 'Greek Yogurt (nonfat)' },
+    'plain greek yogurt': { displayName: 'Greek Yogurt (2%)' },
+    'plain greek yogurt, 2%': { displayName: 'Greek Yogurt (2%)' },
+    'plain greek yogurt, nonfat': { displayName: 'Greek Yogurt (nonfat)' },
   };
   Object.entries(ENTRY_FIXES).forEach(([key, fixes]) => {
     const entry = bank[key];
     if (!entry) return;
     Object.assign(entry, fixes);
+    // If displayName changed, also update the bank key
+    if (fixes.displayName) {
+      const newKey = bankKey(fixes.displayName);
+      if (newKey !== key) {
+        entry.name = newKey;
+        bank[newKey] = entry;
+        delete bank[key];
+      }
+    }
     changed++;
   });
-  if (changed > 0) { persistBank(); console.log('Migrated', changed, 'category entries'); }
+  // Auto-delete known duplicate/wrong entries (only if bank entry exists
+  // and a preferred alternative also exists)
+  const AUTO_DELETE_IF_EXISTS = [
+    // [key to delete, preferred alternative key]
+    ['pork loin steak',   'pork loin'],
+    ['prawn',             'shrimp'],
+    ['rolled oats',       'oatmeal'],
+    ['flour',             'all purpose flour'],
+    ['granulated sugar',  'white sugar'],
+    ['dry yeast',         'yeast'],
+    ['garlic cloves',     'garlic clove'],
+  ];
+  AUTO_DELETE_IF_EXISTS.forEach(([del, keep]) => {
+    if (bank[del] && bank[keep]) {
+      // Update any recipes using the deleted key to use the kept key
+      const keepEntry = bank[keep];
+      recipes.forEach(r => (r.ingredients||[]).forEach(ing => {
+        if (bankKey(ing.item) === del) ing.item = keepEntry.displayName || keep;
+      }));
+      delete bank[del];
+      markBankDeleted(del);
+      changed++;
+    }
+  });
+
+  if (changed > 0) { persistBank(); persist(); console.log('Migrated', changed, 'category/name entries'); }
 }
 
 function fixBankCategories() {
