@@ -1425,8 +1425,12 @@ function renderMPDayPanel(dk, wk) {
       } else if (e.bankKey) {
         const bEntry = bank[e.bankKey];
         name = e.bankName || (bEntry?.displayName) || e.bankKey;
-        detail = e.servings + (bEntry?.unitType==='countable'?' each':' serving'+(e.servings!==1?'s':''));
-        if (bEntry?.cal) calStr = Math.round(bEntry.cal * e.servings / 100) + ' kcal';
+        // Show amount with unit
+        const unit = e.unit || (bEntry?.unitType==='countable' ? 'each' : 'g');
+        detail = e.servings + ' ' + unit;
+        // Use pre-stored cal (calculated correctly at save time with unit+stdWeight)
+        if (e.cal != null) calStr = Math.round(e.cal) + ' kcal';
+        else if (bEntry?.cal) calStr = Math.round(mpIngMacros(e.servings, unit, bEntry)?.cal || 0) + ' kcal';
       } else return '';
       const eaters = (e.eatingProfiles||wkProfiles).map(pid=>{
         const p=getProfile(pid); return p?`<span style="font-size:10px;padding:1px 5px;border-radius:99px;background:${p.color};color:#fff;">${p.name}</span>`:'';
