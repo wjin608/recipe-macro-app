@@ -285,6 +285,16 @@ h1,h2,h3{font-family:'Lora',serif;}
       </div>
     </div>
     <div style="border-bottom:1px solid var(--border);">
+      <div onclick="toggleSb('sl')" style="display:flex;justify-content:space-between;align-items:center;padding:11px 16px;cursor:pointer;user-select:none;">
+        <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text2);">🛒 Shopping List</span>
+        <span id="sb-arr-sl" style="font-size:10px;color:var(--text3);display:inline-block;">▶</span>
+      </div>
+      <div id="sb-sl" style="display:none;padding:0 14px 12px;">
+        <p style="font-size:12px;color:var(--text2);margin-bottom:8px;">Generate a shopping list from your meal plan.</p>
+        <button class="add-recipe-btn" onclick="showPage('shopping')" style="width:100%;">Open Shopping List</button>
+      </div>
+    </div>
+    <div style="border-bottom:1px solid var(--border);">
       <div onclick="toggleSb('bk')" style="display:flex;justify-content:space-between;align-items:center;padding:11px 16px;cursor:pointer;user-select:none;">
         <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text2);">🧪 Ingredient Bank</span>
         <span id="sb-arr-bk" style="font-size:10px;color:var(--text3);display:inline-block;">▶</span>
@@ -347,6 +357,30 @@ h1,h2,h3{font-family:'Lora',serif;}
       </div>
       <div class="week-grid" id="tr-week-grid"></div>
       <div id="tr-day-panel"></div>
+    </div>
+
+    <!-- SHOPPING LIST PAGE -->
+    <div class="page" id="page-shopping">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:8px;">
+        <div>
+          <h1 style="font-family:'Lora',serif;font-size:28px;letter-spacing:-0.02em;margin-bottom:4px;">Shopping List</h1>
+          <p id="sl-subtitle" style="font-size:13px;color:var(--text2);">Select days from the week below</p>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="btn btn-secondary" onclick="slPrevWeek()">←</button>
+          <span id="sl-week-label" style="font-size:13px;font-weight:500;min-width:140px;text-align:center;"></span>
+          <button class="btn btn-secondary" onclick="slNextWeek()">→</button>
+        </div>
+      </div>
+      <!-- Day selector -->
+      <div id="sl-day-grid" style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;"></div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <button class="btn btn-secondary" onclick="slSelectAll()">Select all</button>
+        <button class="btn btn-secondary" onclick="slClearAll()">Clear all</button>
+        <button class="btn btn-primary" onclick="generateShoppingList()">Generate list</button>
+        <button class="btn btn-secondary" onclick="slClearChecked()">Clear checked</button>
+      </div>
+      <div id="sl-content"></div>
     </div>
 
     <!-- INGREDIENT BANK PAGE -->
@@ -1366,10 +1400,7 @@ function renderMPWeekGrid(days, wk) {
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);">${DNAMES[i]}</div>
       <div style="font-size:17px;font-weight:700;font-family:'Lora',serif;line-height:1.1;margin:1px 0 4px;">${d.getDate()}</div>
       ${isTod?'<div style="font-size:9px;background:var(--accent3);color:#fff;border-radius:99px;padding:1px 5px;display:inline-block;margin-bottom:3px;">Today</div>':''}
-      ${m.cal>0?`<div style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><span style="font-weight:600;color:var(--text);">${m.cal}</span> kcal</div>
-      <div style="font-size:10px;color:var(--text2);">P<span style="font-weight:600;">${m.protein}</span> C<span style="font-weight:600;">${m.carbs}</span></div>`
-      :'<div style="font-size:10px;color:var(--text3);">No meals</div>'}
-      ${ct>0?`<div style="font-size:10px;color:var(--text3);margin-top:3px;">${ct} item${ct!==1?'s':''}</div>`:''}
+      ${ct>0?`<div style="font-size:11px;color:var(--text2);margin-top:3px;">${ct} item${ct!==1?'s':''}</div>`:''}
     </div>`;
   }).join('');
 }
@@ -1928,14 +1959,29 @@ function autoLogDayFromPlan(dk, pid) {
       const bEntry = bank[e.bankKey];
       const alreadyLogged = existing.some(l => l.bankKey === e.bankKey && l.slot === e.slot);
       if (alreadyLogged) return;
-      const scale = servings / 100;
+      // Use pre-stored macros (calculated correctly at save time using unit+stdWeight)
+      // Fall back to per-100g calculation only if no pre-stored macros
+      let cal, protein, carbs, fat;
+      if (e.cal != null) {
+        // Scale pre-stored macros by per-person ratio
+        const eaters = (e.eatingProfiles||wkp).length || 1;
+        const ratio = 1 / eaters;
+        cal = Math.round((e.cal||0) * ratio);
+        protein = parseFloat(((e.protein||0) * ratio).toFixed(1));
+        carbs = parseFloat(((e.carbs||0) * ratio).toFixed(1));
+        fat = parseFloat(((e.fat||0) * ratio).toFixed(1));
+      } else {
+        // Fallback: use mpIngMacros with stored unit
+        const macros = mpIngMacros(servings, e.unit || 'g', bEntry);
+        cal = macros?.cal || 0;
+        protein = macros?.protein || 0;
+        carbs = macros?.carbs || 0;
+        fat = macros?.fat || 0;
+      }
       existing.push({
         bankKey: e.bankKey, name: e.bankName || (bEntry?.displayName) || e.bankKey,
-        slot: e.slot, servings,
-        cal: bEntry?.cal ? Math.round(bEntry.cal * scale) : 0,
-        protein: bEntry?.protein ? parseFloat((bEntry.protein * scale).toFixed(1)) : 0,
-        carbs: bEntry?.carbs ? parseFloat((bEntry.carbs * scale).toFixed(1)) : 0,
-        fat: bEntry?.fat ? parseFloat((bEntry.fat * scale).toFixed(1)) : 0,
+        slot: e.slot, servings, unit: e.unit,
+        cal, protein, carbs, fat,
         autoLogged: true, isCustom: false,
       });
     }
@@ -3085,8 +3131,8 @@ function renderBank() {
         <td class="bank-num">${e.protein != null ? parseFloat(e.protein.toFixed(1)) : '—'}</td>
         <td class="bank-num">${e.carbs != null ? parseFloat(e.carbs.toFixed(1)) : '—'}</td>
         <td class="bank-num">${e.fat != null ? parseFloat(e.fat.toFixed(1)) : '—'}</td>
-        <td style="font-size:11px;color:var(--text3);">${e.stdWeight ? e.stdWeight + 'g each' : e.unitType || 'weight'}</td>
-        <td><button class="btn-sm danger" onclick="event.stopPropagation();deleteBankEntry('${e.name}')" title="Delete">🗑</button></td>
+        <td class="bank-num" style="font-size:11px;color:var(--text3);">${e.stdWeight ? e.stdWeight + 'g each' : e.unitType || 'weight'}</td>
+        <td style="text-align:center;padding:4px;"><button class="btn-sm danger" onclick="event.stopPropagation();deleteBankEntry('${e.name}')" title="Delete">🗑</button></td>
       </tr>`).join('');
 
     return `<div class="bank-group">
@@ -3097,7 +3143,17 @@ function renderBank() {
         <span class="bank-group-arrow" id="arr-${groupId}">▶</span>
       </div>
       <div class="bank-group-body" id="${groupId}">
-        <table class="bank-table" style="margin-bottom:0;">
+        <table class="bank-table" style="margin-bottom:0;table-layout:fixed;width:100%;">
+          <colgroup>
+            ${bankMergeMode ? '<col style="width:32px"/>' : ''}
+            <col/>
+            <col style="width:82px"/>
+            <col style="width:78px"/>
+            <col style="width:78px"/>
+            <col style="width:72px"/>
+            <col style="width:96px"/>
+            <col style="width:36px"/>
+          </colgroup>
           <thead><tr>
             ${bankMergeMode ? '<th></th>' : ''}
             <th>Ingredient</th>
@@ -3105,7 +3161,7 @@ function renderBank() {
             <th class="bank-num">Protein</th>
             <th class="bank-num">Carbs</th>
             <th class="bank-num">Fat</th>
-            <th>Std weight</th>
+            <th class="bank-num">Std weight</th>
             <th></th>
           </tr></thead>
           <tbody>${rows}</tbody>
@@ -3442,6 +3498,7 @@ function executeMerge(keepName, allNames) {
 // ── Extend showPage for new pages ──────────────────────────────────────────
 const _sp0=showPage;
 showPage=function(page){
+  if(page==='shopping'){_sp0(page);renderSLPage();return;}
   _sp0(page);
   if(page==='bank')renderBank();
   if(page==='mealplan')renderMealPlan();
@@ -3581,6 +3638,248 @@ function confirmNameReview() {
 function skipNameReview() {
   closeModal('name-review-modal');
   window._nameReviewResolve?.(window._nameReviewIngredients);
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// SHOPPING LIST
+// ══════════════════════════════════════════════════════════════════════════
+const SL_KEY = 'rma_shopping_v1';
+let slState = JSON.parse(localStorage.getItem(SL_KEY) || '{"weekOffset":0,"selectedDays":[],"checked":{}}');
+function persistSL() { localStorage.setItem(SL_KEY, JSON.stringify(slState)); }
+
+function slWeekKey(offset) {
+  const d = new Date();
+  d.setDate(d.getDate() - d.getDay() + 1 + offset * 7);
+  return d.toISOString().slice(0,10);
+}
+
+function slWeekDates(offset) {
+  const dates = [];
+  const d = new Date();
+  d.setDate(d.getDate() - d.getDay() + 1 + offset * 7);
+  for (let i = 0; i < 7; i++) {
+    dates.push(new Date(d));
+    d.setDate(d.getDate() + 1);
+  }
+  return dates;
+}
+
+function slPrevWeek() { slState.weekOffset--; persistSL(); renderSLPage(); }
+function slNextWeek() { slState.weekOffset++; persistSL(); renderSLPage(); }
+
+function slSelectAll() {
+  const dates = slWeekDates(slState.weekOffset);
+  slState.selectedDays = dates.map(d => d.toISOString().slice(0,10));
+  persistSL(); renderSLDayGrid();
+}
+function slClearAll() { slState.selectedDays = []; persistSL(); renderSLDayGrid(); }
+function slClearChecked() { slState.checked = {}; persistSL(); generateShoppingList(); }
+
+function slToggleDay(dk) {
+  const idx = slState.selectedDays.indexOf(dk);
+  if (idx >= 0) slState.selectedDays.splice(idx, 1);
+  else slState.selectedDays.push(dk);
+  persistSL();
+  renderSLDayGrid();
+}
+
+function renderSLDayGrid() {
+  const dates = slWeekDates(slState.weekOffset);
+  const label = document.getElementById('sl-week-label');
+  if (label) {
+    const s = dates[0].toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    const e = dates[6].toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    label.textContent = s + ' – ' + e;
+  }
+  const grid = document.getElementById('sl-day-grid'); if (!grid) return;
+  const DAY_NAMES = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  grid.innerHTML = dates.map((d,i) => {
+    const dk = d.toISOString().slice(0,10);
+    const sel = slState.selectedDays.includes(dk);
+    const wk = weekKey(slState.weekOffset);
+    const hasMeals = MEAL_SLOTS.some(s => ((mealPlan[wk]||{})[dk]||{})[s]?.length > 0);
+    return `<div onclick="slToggleDay('${dk}')" style="
+      padding:8px 10px;border-radius:var(--radius);cursor:pointer;text-align:center;min-width:52px;
+      border:1.5px solid ${sel ? 'var(--text)' : 'var(--border2)'};
+      background:${sel ? 'var(--text)' : '#fff'};
+      color:${sel ? '#fff' : 'var(--text2)'};font-size:12px;font-weight:${sel?'600':'400'};">
+      <div>${DAY_NAMES[i]}</div>
+      <div style="font-size:10px;margin-top:1px;opacity:0.7;">${d.getDate()}</div>
+      ${hasMeals ? `<div style="width:5px;height:5px;border-radius:50%;background:${sel?'rgba(255,255,255,0.7)':'var(--accent)'};margin:3px auto 0;"></div>` : '<div style="height:8px;"></div>'}
+    </div>`;
+  }).join('');
+}
+
+function renderSLPage() {
+  renderSLDayGrid();
+  generateShoppingList();
+}
+
+// Parse a raw amount string like "1.5 cups", "200g", "2 tbsp" → {qty, unit}
+function parseRawAmount(raw) {
+  if (!raw) return null;
+  const m = raw.match(/^([\d.\/\s]+)\s*([a-zA-Z]*)/);
+  if (!m) return null;
+  const qStr = m[1].trim();
+  let qty;
+  if (qStr.includes('/')) {
+    const parts = qStr.split('/');
+    qty = parseFloat(parts[0]) / parseFloat(parts[1]);
+  } else {
+    qty = parseFloat(qStr);
+  }
+  if (isNaN(qty)) return null;
+  return { qty, unit: (m[2]||'').toLowerCase().trim() };
+}
+
+// Convert amount to grams for aggregation
+function toGrams(qty, unit, bankEntry) {
+  const TO_G = { g:1, oz:28.3495, lb:453.592, kg:1000,
+    cup:240, tbsp:14.787, tsp:4.929, ml:1, 'fl oz':29.574 };
+  if (!unit || unit === 'g') return qty;
+  if (['piece','whole','each','slice'].includes(unit)) return qty * (bankEntry?.stdWeight || 100);
+  return qty * (TO_G[unit] || 1);
+}
+
+// Pick best display unit for an ingredient based on all its usages
+function pickBestUnit(usages) {
+  // usages: [{qty, unit}]
+  const unitCounts = {};
+  usages.forEach(u => { unitCounts[u.unit] = (unitCounts[u.unit]||0) + 1; });
+  // Most common unit wins
+  return Object.entries(unitCounts).sort((a,b)=>b[1]-a[1])[0][0];
+}
+
+// Convert grams back to a natural unit
+function gramsToUnit(grams, unit, bankEntry) {
+  const FROM_G = { g:1, oz:1/28.3495, lb:1/453.592, kg:1/1000,
+    cup:1/240, tbsp:1/14.787, tsp:1/4.929, ml:1 };
+  if (unit === 'piece' || unit === 'whole' || unit === 'each') {
+    return grams / (bankEntry?.stdWeight || 100);
+  }
+  return grams * (FROM_G[unit] || 1);
+}
+
+function formatQty(qty, unit) {
+  const n = Math.round(qty * 10) / 10;
+  if (n === Math.floor(n)) return n + (unit ? ' ' + unit : '');
+  return n.toFixed(1) + (unit ? ' ' + unit : '');
+}
+
+function generateShoppingList() {
+  const content = document.getElementById('sl-content'); if (!content) return;
+  if (!slState.selectedDays.length) {
+    content.innerHTML = '<p style="font-size:13px;color:var(--text3);padding:20px 0;">Select days above then click Generate list.</p>';
+    return;
+  }
+  const wk = weekKey(slState.weekOffset);
+  // Aggregate: key = ingredient name (lowercased), value = {displayName, usages[], cat, bankEntry, rawLines[]}
+  const agg = {};
+
+  slState.selectedDays.forEach(dk => {
+    MEAL_SLOTS.forEach(slot => {
+      const items = ((mealPlan[wk]||{})[dk]||{})[slot] || [];
+      items.forEach(entry => {
+        const eaters = (entry.eatingProfiles || getMPWeekProfiles()).length || 1;
+        const totalServings = entry.servings; // full amount for all eaters
+
+        if (entry.recipeId) {
+          const r = recipes.find(r => r.id === entry.recipeId); if (!r) return;
+          const scale = totalServings / (r.servings || 1);
+          (r.ingredients||[]).forEach(ing => {
+            if (!ing.item) return;
+            const key = bankKey(ing.item);
+            const bEntry = bank[key];
+            const cat = bEntry?.category || 'Other';
+            if (!agg[key]) agg[key] = { displayName: bEntry?.displayName || ing.item, cat, bankEntry: bEntry, usages: [], rawLines: [] };
+            // Parse raw amount
+            const parsed = parseRawAmount(ing.rawAmount || ing.amount || '');
+            if (parsed) {
+              agg[key].usages.push({ qty: parsed.qty * scale, unit: parsed.unit || 'g' });
+            } else {
+              agg[key].rawLines.push((ing.rawAmount || ing.amount || '?') + ' (from ' + r.name + ')');
+            }
+          });
+        } else if (entry.bankKey) {
+          const key = entry.bankKey;
+          const bEntry = bank[key];
+          const cat = bEntry?.category || 'Other';
+          if (!agg[key]) agg[key] = { displayName: entry.bankName || bEntry?.displayName || key, cat, bankEntry: bEntry, usages: [], rawLines: [] };
+          agg[key].usages.push({ qty: entry.servings, unit: entry.unit || 'g' });
+        }
+      });
+    });
+  });
+
+  if (!Object.keys(agg).length) {
+    content.innerHTML = '<p style="font-size:13px;color:var(--text3);padding:20px 0;">No meals scheduled for the selected days.</p>';
+    return;
+  }
+
+  // Group by category
+  const cats = {};
+  Object.entries(agg).forEach(([key, item]) => {
+    const cat = item.cat || 'Other';
+    if (!cats[cat]) cats[cat] = [];
+    // Compute combined total
+    let totalLine = '';
+    if (item.usages.length) {
+      const bestUnit = pickBestUnit(item.usages);
+      const totalGrams = item.usages.reduce((sum, u) => sum + toGrams(u.qty, u.unit, item.bankEntry), 0);
+      const totalInUnit = gramsToUnit(totalGrams, bestUnit, item.bankEntry);
+      totalLine = formatQty(totalInUnit, bestUnit);
+    }
+    const extras = item.rawLines.join(', ');
+    cats[cat].push({ key, displayName: item.displayName, totalLine, extras });
+  });
+
+  // Sort categories using BANK_CATEGORIES order
+  const catOrder = [...BANK_CATEGORIES, 'Other'];
+  const sortedCats = Object.keys(cats).sort((a,b) => {
+    const ai = catOrder.indexOf(a), bi = catOrder.indexOf(b);
+    if (ai<0&&bi<0) return a.localeCompare(b);
+    if (ai<0) return 1; if (bi<0) return -1;
+    return ai-bi;
+  });
+
+  const html = sortedCats.map(cat => {
+    const icon = CATEGORY_ICONS[cat] || '📦';
+    const items = cats[cat].sort((a,b) => a.displayName.localeCompare(b.displayName));
+    const rows = items.map(item => {
+      const chkKey = item.key;
+      const checked = slState.checked[chkKey] ? 'checked' : '';
+      const strike = slState.checked[chkKey] ? 'text-decoration:line-through;color:var(--text3);' : '';
+      return `<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 12px;border-top:1px solid var(--border);">
+        <input type="checkbox" ${checked} onchange="slToggleCheck('${chkKey}',this.checked)"
+          style="margin-top:2px;width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--accent);"/>
+        <div style="flex:1;min-width:0;">
+          <span style="font-size:13px;font-weight:500;${strike}">${item.displayName}</span>
+          ${item.totalLine ? `<span style="font-size:12px;color:var(--text3);margin-left:8px;">${item.totalLine}</span>` : ''}
+          ${item.extras ? `<div style="font-size:11px;color:var(--text3);margin-top:2px;">${item.extras}</div>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+    return `<div style="margin-bottom:10px;border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;">
+      <div style="padding:10px 14px;background:var(--surface2);">
+        <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--text2);">${icon} ${cat}</span>
+        <span style="font-size:11px;color:var(--text3);margin-left:8px;">${items.length} item${items.length!==1?'s':''}</span>
+      </div>
+      ${rows}
+    </div>`;
+  }).join('');
+
+  const totalItems = Object.keys(agg).length;
+  const subtitle = document.getElementById('sl-subtitle');
+  if (subtitle) subtitle.textContent = totalItems + ' ingredient' + (totalItems!==1?'s':'') + ' across ' + slState.selectedDays.length + ' day' + (slState.selectedDays.length!==1?'s':'');
+
+  content.innerHTML = html;
+}
+
+function slToggleCheck(key, checked) {
+  if (checked) slState.checked[key] = true;
+  else delete slState.checked[key];
+  persistSL();
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
