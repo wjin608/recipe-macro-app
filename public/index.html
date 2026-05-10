@@ -1772,18 +1772,37 @@ function mpRemoveEntry(wk,dk,slot,idx) {
 
 function mpCopyEntry(wk,dk,slot,idx) {
   const entry = mealPlan[wk]?.[dk]?.[slot]?.[idx]; if(!entry) return;
-  const r = recipes.find(r=>r.id===entry.recipeId);
+  const itemName = entry.recipeId
+    ? (recipes.find(r=>r.id===entry.recipeId)?.name || 'Recipe')
+    : (entry.bankName || entry.bankKey || 'Ingredient');
   const days = getWeekDates(mpWeekOffset);
   const DNAMES=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
-  const dayOpts = days.map((d,i)=>{const k=dKey(d);return `<div onclick="mpCopyPickDay('${k}',this)" data-key="${k}" style="padding:7px 10px;border:1px solid ${k===dk?'var(--text)':'var(--border)'};border-radius:var(--radius);cursor:pointer;background:${k===dk?'var(--surface2)':'#fff'};font-size:13px;">${DNAMES[i]} ${d.getDate()}${isToday(d)?' (today)':''}</div>`;}).join('');
-  const slotOpts = MEAL_SLOTS.map(s=>`<div onclick="mpCopyPickSlot('${s}',this)" data-slot="${s}" style="padding:7px 10px;border:1px solid ${s===slot?'var(--text)':'var(--border)'};border-radius:var(--radius);cursor:pointer;background:${s===slot?'var(--surface2)':'#fff'};font-size:13px;">${s}</div>`).join('');
+  // Multi-select days (checkboxes), single-select slot
+  const dayOpts = days.map((d,i)=>{
+    const k=dKey(d);
+    const isSrc = k===dk;
+    return `<label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:var(--radius);cursor:pointer;font-size:13px;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='none'">
+      <input type="checkbox" class="cp-day-chk" data-key="${k}" ${isSrc?'':''}
+        style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;"/>
+      ${DNAMES[i]} ${d.getDate()}${isToday(d)?' <span style=\"font-size:10px;color:var(--accent3);\">(today)</span>':''}
+    </label>`;
+  }).join('');
 
-  window._mpCopy = {srcWk:wk,srcDk:dk,srcSlot:slot,srcIdx:idx,destDk:dk,destSlot:slot};
+  const slotOpts = MEAL_SLOTS.map(s=>`<div onclick="mpCopyPickSlot('${s}',this)" data-slot="${s}"
+    style="padding:7px 10px;border:1px solid ${s===slot?'var(--text)':'var(--border)'};border-radius:var(--radius);cursor:pointer;background:${s===slot?'var(--surface2)':'#fff'};font-size:13px;margin-bottom:4px;">${s}</div>`).join('');
+
+  window._mpCopy = {srcWk:wk,srcDk:dk,srcSlot:slot,srcIdx:idx,destSlot:slot};
   showModal('mp-copy-modal',`
-    <div class="modal-title">Copy "${r?.name||'Recipe'}"</div>
-    <div class="modal-field"><label>To day</label><div class="pick-list" style="max-height:160px;" id="cp-days">${dayOpts}</div></div>
-    <div class="modal-field"><label>Meal slot</label><div class="pick-list" style="max-height:130px;" id="cp-slots">${slotOpts}</div></div>
+    <div class="modal-title">Copy "${itemName}"</div>
+    <div class="modal-field">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <label>Copy to days</label>
+        <button onclick="document.querySelectorAll('.cp-day-chk').forEach(c=>c.checked=true)" style="background:none;border:none;font-size:11px;color:var(--accent);cursor:pointer;">Select all</button>
+      </div>
+      <div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">${dayOpts}</div>
+    </div>
+    <div class="modal-field"><label>Meal slot</label><div style="margin-top:4px;">${slotOpts}</div></div>
     <div class="btn-row" style="margin-top:14px;">
       <button class="btn btn-primary" onclick="mpConfirmCopy()">Copy</button>
       <button class="btn btn-secondary" onclick="closeModal('mp-copy-modal')">Cancel</button>
@@ -1794,14 +1813,24 @@ function mpCopyPickDay(dk,el){window._mpCopy.destDk=dk;document.querySelectorAll
 function mpCopyPickSlot(s,el){window._mpCopy.destSlot=s;document.querySelectorAll('#cp-slots>div').forEach(e=>{e.style.borderColor='var(--border)';e.style.background='#fff'});el.style.borderColor='var(--text)';el.style.background='var(--surface2)';}
 
 function mpConfirmCopy() {
-  const {srcWk,srcDk,srcSlot,srcIdx,destDk,destSlot} = window._mpCopy;
-  const entry = mealPlan[srcWk]?.[srcDk]?.[srcSlot]?.[srcIdx]; if(!entry) {closeModal('mp-copy-modal');return;}
+  const {srcWk,srcDk,srcSlot,srcIdx,destSlot} = window._mpCopy;
+  const entry = mealPlan[srcWk]?.[srcDk]?.[srcSlot]?.[srcIdx];
+  if (!entry) { closeModal('mp-copy-modal'); return; }
+
+  // Collect all checked days
+  const checkedDays = [...document.querySelectorAll('.cp-day-chk:checked')].map(el => el.dataset.key);
+  if (!checkedDays.length) { alert('Please select at least one day to copy to.'); return; }
+
   ensureWeek(srcWk);
-  if(!mealPlan[srcWk][destDk]) mealPlan[srcWk][destDk]={};
-  if(!mealPlan[srcWk][destDk][destSlot]) mealPlan[srcWk][destDk][destSlot]=[];
-  mealPlan[srcWk][destDk][destSlot].push({...entry});
+  checkedDays.forEach(destDk => {
+    if (!mealPlan[srcWk][destDk]) mealPlan[srcWk][destDk] = {};
+    if (!mealPlan[srcWk][destDk][destSlot]) mealPlan[srcWk][destDk][destSlot] = [];
+    mealPlan[srcWk][destDk][destSlot].push({...entry});
+  });
+
   persistMP(); closeModal('mp-copy-modal');
-  renderMPWeekGrid(getWeekDates(mpWeekOffset),srcWk); renderMPDayPanel(mpActiveDay,srcWk);
+  renderMPWeekGrid(getWeekDates(mpWeekOffset),srcWk);
+  renderMPDayPanel(mpActiveDay, srcWk);
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -3683,20 +3712,13 @@ let slState = JSON.parse(localStorage.getItem(SL_KEY) || '{"weekOffset":0,"selec
 function persistSL() { localStorage.setItem(SL_KEY, JSON.stringify(slState)); }
 
 function slWeekKey(offset) {
-  const d = new Date();
-  d.setDate(d.getDate() - d.getDay() + 1 + offset * 7);
-  return d.toISOString().slice(0,10);
+  // Use same logic as weekKey() which correctly handles Monday start
+  return weekKey(offset);
 }
 
 function slWeekDates(offset) {
-  const dates = [];
-  const d = new Date();
-  d.setDate(d.getDate() - d.getDay() + 1 + offset * 7);
-  for (let i = 0; i < 7; i++) {
-    dates.push(new Date(d));
-    d.setDate(d.getDate() + 1);
-  }
-  return dates;
+  // Use same logic as getWeekDates() which correctly handles Monday start
+  return getWeekDates(offset);
 }
 
 function slPrevWeek() { slState.weekOffset--; persistSL(); renderSLPage(); }
@@ -3731,7 +3753,7 @@ function renderSLDayGrid() {
   grid.innerHTML = dates.map((d,i) => {
     const dk = d.toISOString().slice(0,10);
     const sel = slState.selectedDays.includes(dk);
-    const wk = weekKey(slState.weekOffset);
+    const wk = slWeekKey(slState.weekOffset);
     const hasMeals = MEAL_SLOTS.some(s => ((mealPlan[wk]||{})[dk]||{})[s]?.length > 0);
     return `<div onclick="slToggleDay('${dk}')" style="
       padding:8px 10px;border-radius:var(--radius);cursor:pointer;text-align:center;min-width:52px;
@@ -3807,7 +3829,7 @@ function generateShoppingList() {
     content.innerHTML = '<p style="font-size:13px;color:var(--text3);padding:20px 0;">Select days above then click Generate list.</p>';
     return;
   }
-  const wk = weekKey(slState.weekOffset);
+  const wk = slWeekKey(slState.weekOffset);
   // Aggregate: key = ingredient name (lowercased), value = {displayName, usages[], cat, bankEntry, rawLines[]}
   const agg = {};
 
